@@ -45,7 +45,7 @@ class ReplayMemory(object):
 
 class pharm_env():
     
-    def __init__(self,max_steps,top_dir,txt_file,batch_size,randomize=True):
+    def __init__(self,max_steps,top_dir,txt_file,batch_size,randomize=True,pharm_pharm_radius=6,protein_pharm_radius=7):
         self.curent_step=0
         self.max_steps=max_steps
         self.dataset=None
@@ -54,6 +54,8 @@ class pharm_env():
         self.randomize=randomize
         self.batch_size=batch_size
         self.target_df=None
+        self.pharm_pharm_radius=pharm_pharm_radius
+        self.protein_pharm_radius=protein_pharm_radius
         s = molgrid.ExampleProviderSettings(data_root=top_dir)
         coord_reader = molgrid.CoordCache(molgrid.defaultGninaReceptorTyper,s)
         data_info = pd.read_csv(txt_file, header=None,delimiter=';') 
@@ -101,7 +103,7 @@ class pharm_env():
         protein_types=protein.c.type_index.tonumpy()
         pharm_coords=cache[0]['centers']
         pharm_feats=cache[0]['feature_vector']
-        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph)
+        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius)
         self.current_graph=dataset.current_graph
         dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False)
         return dataloader
@@ -117,29 +119,27 @@ class pharm_env():
             self.current_graph=graph
             if len(next_state_dataloader.dataset)==0:
                 done=True
+        file_sets=[]
+        system=self.systems[self.system_index]
+        cache=self.system_to_cache[system]
+        pharm_coords=cache[0]['centers']
+        num=len(graph['pharm'].index)
+        target_df=self.target_df
+        target_df['f1']=target_df['f1']/target_df['f1'].max()
+        target_df=target_df[self.target_df['file'].str.startswith('pharmit_'+str(num)+'_')==1].sort_values(by='f1',ascending=False)
+        for node in graph['pharm'].index:
+            pos=pharm_coords[node]
+            file_set=set(target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)]['file'])
+            file_sets.append(file_set)
+        #TODO take the max reward
+        interesection=set.intersection(*file_sets)
+        max_f1=0
+        for file in interesection:
+            f1=self.target_df.loc[self.target_df['file']==file]['f1'].values[0]
+            if f1>max_f1:
+                max_f1=f1
+        reward=max_f1
         if done:
-            file_sets=[]
-            system=self.systems[self.system_index]
-            cache=self.system_to_cache[system]
-            pharm_coords=cache[0]['centers']
-            num=len(graph['pharm'].index)
-            target_df=self.target_df
-            print(target_df['f1'].max(),target_df.head(10))
-            target_df['f1']=target_df['f1']/target_df['f1'].max()
-            print(target_df.head(10))
-            target_df=target_df[self.target_df['file'].str.startswith('pharmit_'+str(num)+'_')==1].sort_values(by='f1',ascending=False)
-            for node in graph['pharm'].index:
-                pos=pharm_coords[node]
-                file_set=set(target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)]['file'])
-                file_sets.append(file_set)
-            #TODO take the max reward
-            interesection=set.intersection(*file_sets)
-            max_f1=0
-            for file in interesection:
-                f1=self.target_df.loc[self.target_df['file']==file]['f1'].values[0]
-                if f1>max_f1:
-                    max_f1=f1
-            reward=max_f1
             next_state_dataloader=None
         return next_state_dataloader,done,reward
 

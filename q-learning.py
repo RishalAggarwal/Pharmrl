@@ -21,7 +21,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     #q-learning parameters
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--gamma', type=float, default=0.9)
+    parser.add_argument('--gamma', type=float, default=0.7)
     parser.add_argument('--epsilon_start', type=float, default=0.9)
     parser.add_argument('--epsilon_decay', type=float, default=10000)
     parser.add_argument('--epsilon_min', type=float, default=0.01)
@@ -34,9 +34,12 @@ def parse_arguments():
     parser.add_argument('--num_tests', type=int, default=100)
     parser.add_argument('--num_test_steps', type=int, default=1000)
     #environment parameters
-    parser.add_argument('--top_dir', type=str, default='./data')
-    parser.add_argument('--txt_file', type=str, default='./data/pur2_dataset.txt')
+    parser.add_argument('--top_dir', type=str, default='../Pharmnn/data')
+    parser.add_argument('--txt_file', type=str, default='../Pharmnn/data/pur2_dataset.txt')
     parser.add_argument('--randomize', type=bool, default=True)
+    parser.add_argument('--reward', type=str, default='f1', choices=['f1','length'])
+    parser.add_argument('--pharm_pharm_radius', type=float, default=10)
+    parser.add_argument('--protein_pharm_radius', type=float, default=8)
     #model parameters
     parser.add_argument('--in_pharm_node_features',type=int,default=32)
     parser.add_argument('--in_prot_node_features',type=int,default=14)
@@ -44,7 +47,7 @@ def parse_arguments():
     parser.add_argument('--ns',type=int,default=32)
     parser.add_argument('--nv',type=int,default=8)
     parser.add_argument('--num_conv_layers',type=int,default=4)
-    parser.add_argument('--max_radius',type=int,default=6)
+    parser.add_argument('--max_radius',type=float,default=8)
     parser.add_argument('--radius_embed_dim',type=int,default=50)
     parser.add_argument('--batch_norm',type=bool,default=True)
     parser.add_argument('--residual',type=bool,default=True)
@@ -54,12 +57,15 @@ def parse_arguments():
     args = parser.parse_args()
     return args
 
-def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilon_decay,steps_done):
+def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilon_decay,steps_done,test=False):
     
-    eps_threshold = epsilon_end + (epsilon_start - epsilon_end) * \
-        math.exp(-1. * steps_done / epsilon_decay)
-    steps_done += 1
-    wandb.log({'epsilon':eps_threshold})
+    if test:
+        eps_threshold=0
+    else:
+        eps_threshold = epsilon_end + (epsilon_start - epsilon_end) * \
+            math.exp(-1. * steps_done / epsilon_decay)
+        steps_done += 1
+        wandb.log({'epsilon':eps_threshold})
 
     values=[]
     if random.random() > eps_threshold:
@@ -97,7 +103,7 @@ def main():
     
     
     
-    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,txt_file=args.txt_file,batch_size=args.batch_size,randomize=args.randomize)
+    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,txt_file=args.txt_file,batch_size=args.batch_size,randomize=args.randomize,pharm_pharm_radius=args.pharm_pharm_radius,protein_pharm_radius=args.protein_pharm_radius)
 
     policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
     target_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
@@ -167,13 +173,28 @@ def main():
         optimizer.step()
 
     steps_done = 0
+    best_test_f1=0
 
     for i_episode in range(num_episodes):
         state_loader = env.reset()
         state=None
+        prev_f1=0
+        cum_reward=0
         for t in range(num_steps):
             next_state,steps_done = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done)
-            next_state_loader, done, reward = env.step(next_state,t)
+            next_state_loader, done, current_f1 = env.step(next_state,t)
+            if args.reward_type=='f1':
+                cum_reward=current_f1
+            else:
+                if prev_f1==current_f1:
+                    reward=0
+                elif current_f1>prev_f1:
+                    reward=1
+                else:
+                    reward=0
+                cum_reward+=reward
+            prev_f1=current_f1
+            #sanity check
             transition=Transition(next_state,next_state_loader,reward)
             memory.push(transition)
             state_loader = next_state_loader
@@ -184,9 +205,10 @@ def main():
         if i_episode % target_update == 0:
             for param, target_param in zip(policy_net.parameters(), target_net.parameters()):
                 target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
-        wandb.log({'graph_length':len(next_state['pharm'].index)})
-        wandb.log({'reward':reward,'episode':i_episode})
-        #print('Episode {} F1 Score: {:.5f}'.format(i_episode, reward))     
+        wandb.log({'graph_length':len(next_state['pharm'].index),'reward':cum_reward,'episode':i_episode,'f1_score':current_f1})
+        #if i_episode % num_tests == 0:
+        #    for env in test_envs
+
 
 
 if __name__ == '__main__':
