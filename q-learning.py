@@ -32,13 +32,14 @@ def parse_arguments():
     parser.add_argument('--num_episodes', type=int, default=10000)
     parser.add_argument('--num_steps', type=int, default=10)
     parser.add_argument('--num_tests', type=int, default=100)
-    parser.add_argument('--num_test_steps', type=int, default=1000)
+    parser.add_argument('--num_test_steps', type=int, default=10)
     #environment parameters
     parser.add_argument('--top_dir', type=str, default='../Pharmnn/data')
-    parser.add_argument('--txt_file', type=str, default='../Pharmnn/data/pur2_dataset.txt')
+    parser.add_argument('--train_file', type=str, default='../Pharmnn/data/train_pharmrl_dataset.txt')
+    parser.add_argument('--test_file', type=str, default='../Pharmnn/data/test_pharmrl_dataset.txt')
     parser.add_argument('--randomize', type=bool, default=True)
-    parser.add_argument('--reward', type=str, default='f1', choices=['f1','length'])
-    parser.add_argument('--pharm_pharm_radius', type=float, default=10)
+    parser.add_argument('--reward_type', type=str, default='f1', choices=['f1','length'])
+    parser.add_argument('--pharm_pharm_radius', type=float, default=12)
     parser.add_argument('--protein_pharm_radius', type=float, default=8)
     #model parameters
     parser.add_argument('--in_pharm_node_features',type=int,default=32)
@@ -54,6 +55,8 @@ def parse_arguments():
     #run parameters
     parser.add_argument('--wandb_project', type=str, default='pharmrl')
     parser.add_argument('--wandb_run_name', type=str, default='')
+    parser.add_argument('--save_model', type=bool, default=False)
+    parser.add_argument('--save_path', type=str, default='runs/trial_best.pt')
     args = parser.parse_args()
     return args
 
@@ -78,7 +81,7 @@ def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilo
             index=values.index(max(values))
             if index==len(state_loader.dataset)-1:
                 #if terminated without building a graph
-                if len(state_loader.dataset[index]['pharm'].index)<3:
+                if len(state_loader.dataset[index]['pharm'].index)<2:
                     values.pop(-1)
                     index=values.index(max(values))
                     return state_loader.dataset[index],steps_done
@@ -89,7 +92,7 @@ def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilo
         index=random.randrange(len(state_loader.dataset))
         if index==len(state_loader.dataset)-1:
             #if terminated without building a graph
-            if state is None or len(state['pharm'].index)<3:
+            if state is None or len(state['pharm'].index)<2:
                 index=random.randrange(len(state_loader.dataset)-1)
                 return state_loader.dataset[index],steps_done
             else:
@@ -103,7 +106,7 @@ def main():
     
     
     
-    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,txt_file=args.txt_file,batch_size=args.batch_size,randomize=args.randomize,pharm_pharm_radius=args.pharm_pharm_radius,protein_pharm_radius=args.protein_pharm_radius)
+    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,train_file=args.train_file,test_file=args.test_file,batch_size=args.batch_size,randomize=args.randomize,pharm_pharm_radius=args.pharm_pharm_radius,protein_pharm_radius=args.protein_pharm_radius)
 
     policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
     target_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
@@ -184,6 +187,7 @@ def main():
             next_state,steps_done = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done)
             next_state_loader, done, current_f1 = env.step(next_state,t)
             if args.reward_type=='f1':
+                reward=current_f1
                 cum_reward=current_f1
             else:
                 if prev_f1==current_f1:
@@ -200,14 +204,37 @@ def main():
             state_loader = next_state_loader
             state=next_state
             optimize_model()
-            if done:
+            if done or len(state_loader.dataset)==0:
                 break
         if i_episode % target_update == 0:
             for param, target_param in zip(policy_net.parameters(), target_net.parameters()):
                 target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
         wandb.log({'graph_length':len(next_state['pharm'].index),'reward':cum_reward,'episode':i_episode,'f1_score':current_f1})
-        #if i_episode % num_tests == 0:
-        #    for env in test_envs
+        if i_episode % num_tests == 0:
+            with torch.no_grad():
+                mean_test_f1=0
+                for i in range(len(env.systems_list[1])):
+                    state_loader = env.loop_test()
+                    for t in range(num_test_steps):
+                        next_state,steps_done = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True)
+                        next_state_loader, done, current_f1 = env.step(next_state,t,test=True)
+                        state_loader = next_state_loader
+                        state=next_state
+                        if done or len(state_loader.dataset)==0:
+                            break
+                    mean_test_f1+=current_f1
+                mean_test_f1/=len(env.systems_list[1])
+                wandb.log({'mean_test_f1':mean_test_f1})
+                if mean_test_f1>best_test_f1:
+                    best_test_f1=mean_test_f1
+                    if args.save_model:
+                        torch.save(policy_net.state_dict(), args.save_path)
+                        print('saved model')
+                    wandb.log({'best_test_f1':best_test_f1})
+                    wandb.run.summary["best_test_f1"] = best_test_f1
+                    print('best test f1: ',best_test_f1)
+                    print('mean test f1: ',mean_test_f1)
+                    print('episode: ',i_episode)
 
 
 
