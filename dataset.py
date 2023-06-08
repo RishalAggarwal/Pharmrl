@@ -105,3 +105,6 @@ class graphdataset(Dataset):
     
     def get(self,idx):
         return self.datapoints[idx]
+    
+    def pop(self,idx):
+        self.datapoints.pop(idx)

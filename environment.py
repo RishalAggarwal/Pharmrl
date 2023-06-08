@@ -124,8 +124,10 @@ class pharm_env():
         dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False)
         return dataloader
 
-    def step(self,graph,current_step,test=False):
+    def step(self,graph,current_step,test=False,current_graph=None):
         '''return the reward and state dataloader and whether the episode is done for the next action'''
+        if current_graph is not None:
+            self.current_graph=current_graph
         if test:
             self.system_index=self.test_system_index
             systems_list_index=1
