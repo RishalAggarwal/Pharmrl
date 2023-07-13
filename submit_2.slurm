@@ -38,4 +38,4 @@ module load cuda/11.5
 
 #/net/pulsar/home/koes/rishal/.conda/envs/phramnn/bin/wandb agent --count 1 rishalaggarwal/pharmrl/22jqmayw
 #python q-learning.py --wandb_run_name all_dude
-python q-learning.py --batch_norm=true --batch_size=45 --epsilon_decay=16000 --epsilon_min=0.017011998579683857 --epsilon_start=0.8733283346001617 --gamma=0.4650925534883208 --lr=0.000492841981715628 --max_radius=8 --memory_size=1014 --num_conv_layers=8 --num_episodes=30000 --pharm_pharm_radius=15 --protein_pharm_radius=12 --radius_embed_dim=97 --residual=true --reward_type=f1 --target_update=1 --tau=0.6232604485053497 --save_model True
+python q-learning.py --batch_norm=true --batch_size=45 --epsilon_decay=16000 --epsilon_min=0.017011998579683857 --epsilon_start=0.8733283346001617 --gamma=0.4650925534883208 --lr=0.000492841981715628 --max_radius=8 --memory_size=1014 --num_conv_layers=8 --num_episodes=30000 --pharm_pharm_radius=15 --protein_pharm_radius=12 --radius_embed_dim=97 --residual=true --reward_type=f1 --target_update=1 --tau=0.6232604485053497 --save_model True --train_file train_dude_obabel_1_2.txt --test_file test_dude_obabel_1_2.txt

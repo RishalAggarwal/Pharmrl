@@ -37,6 +37,7 @@ def parse_arguments():
     parser.add_argument('--stochastic', type=bool, default=False, help='stochastic policy')
     parser.add_argument('--beam_search', type=bool, default=False, help='beam search')
     parser.add_argument('--beam_size', type=int, default=3, help='beam size')
+    parser.add_argument('--return_reward', type=bool, default=True, help='return reward')
     #environment parameters
     parser.add_argument('--top_dir', type=str, default='../Pharmnn/data')
     parser.add_argument('--train_file', type=str, default='../Pharmnn/data/train_pharmrl_dataset.txt')
@@ -160,7 +161,7 @@ def remove_duplicates_nones(values,next_states,next_state_loaders,f1s,dones):
 
 
 
-def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps):
+def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,return_reward):
     
     values=[]
     next_states=[]
@@ -193,7 +194,7 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
                         dones_beam.append(True)
                         next_state_loaders_beam.append(None)
                     else:
-                        next_state_loader, done, current_f1 = env.step(next_state,t,test=True,current_graph=next_states[i])
+                        next_state_loader, done, current_f1 = env.step(next_state,t,test=True,current_graph=next_states[i],return_reward=return_reward)
                         f1s_beam.append(current_f1)
                         dones_beam.append(done)
                         next_state_loaders_beam.append(next_state_loader)
@@ -217,6 +218,7 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
         values=values[values_index]
         values=list(values)
         values,next_states,next_state_loaders,f1s,dones=remove_duplicates_nones(values,next_states,next_state_loaders,f1s,dones)
+        print(values,f1s,dones)
         if len(values)>beam_size:
             values=values[:beam_size]
             next_states=next_states[:beam_size]
@@ -230,7 +232,7 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
                 break
         if done_flag:
             break
-    return next_states[0],steps_done,max(f1s),values[0]
+    return next_states[0],steps_done,f1s[0],values[0]
 
 def main():
     args = parse_arguments()
@@ -320,7 +322,7 @@ def main():
         cum_reward=0
         for t in range(num_steps):
             next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done)
-            next_state_loader, done, current_f1 = env.step(next_state,t)
+            next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward)
             if args.reward_type=='f1':
                 reward=current_f1
                 cum_reward=current_f1
@@ -357,7 +359,7 @@ def main():
                     state_loader = env.loop_test()
                     if args.beam_search:
                         state=None
-                        state,steps_done,current_f1,value=beam_search(env,args.gamma,state,state_loader,policy_net,args.beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps)
+                        state,steps_done,current_f1,value=beam_search(env,args.gamma,state,state_loader,policy_net,args.beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,args.return_reward)
                         values.append(value)
                         f1s.append(current_f1)
                         graphs_list.append(state['pharm'].pos.tolist())
@@ -369,7 +371,7 @@ def main():
                                 next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True)
                             if args.test_only:
                                 graphs_list.append(next_state['pharm'].pos.tolist())
-                            next_state_loader, done, current_f1 = env.step(next_state,t,test=True)
+                            next_state_loader, done, current_f1 = env.step(next_state,t,test=True,return_reward=args.return_reward)
                             state_loader = next_state_loader
                             state=next_state
                             if done or len(state_loader.dataset)==0:
@@ -380,7 +382,7 @@ def main():
                     if args.test_only:
                         print(env.system)
                         print(values[-1])
-                        print(f1s[-1])
+                        print(max(f1s))
                         print(graphs_list)
                     mean_test_f1+=current_f1
                 mean_test_f1/=len(env.systems_list[1])

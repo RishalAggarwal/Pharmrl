@@ -124,7 +124,7 @@ class pharm_env():
         dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False)
         return dataloader
 
-    def step(self,graph,current_step,test=False,current_graph=None):
+    def step(self,graph,current_step,test=False,current_graph=None,return_reward=True):
         '''return the reward and state dataloader and whether the episode is done for the next action'''
         if current_graph is not None:
             self.current_graph=current_graph
@@ -143,29 +143,46 @@ class pharm_env():
             self.current_graph=graph
             if len(next_state_dataloader.dataset)==0:
                 done=True
-        file_sets=[]
-        system=self.systems_list[systems_list_index][self.system_index]
-        cache=self.system_to_cache[system]
-        pharm_coords=cache[0]['centers']
-        num=len(graph['pharm'].index)
-        target_df=self.target_df
-        target_df['f1']=target_df['f1']/target_df['f1'].max()
-        target_df=target_df[self.target_df['file'].str.startswith('pharmit_'+str(num)+'_')==1].sort_values(by='f1',ascending=False)
-        for node in graph['pharm'].index:
-            pos=pharm_coords[node]
-            file_set=set(target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)]['file'])
-            file_sets.append(file_set)
-        #TODO take the max reward
-        interesection=set.intersection(*file_sets)
-        max_f1=0
-        for file in interesection:
-            f1=self.target_df.loc[self.target_df['file']==file]['f1'].values[0]
-            if f1>max_f1:
-                max_f1=f1
-        reward=max_f1
+        if return_reward:
+            file_sets=[]
+            system=self.systems_list[systems_list_index][self.system_index]
+            cache=self.system_to_cache[system]
+            pharm_coords=cache[0]['centers']
+            num=len(graph['pharm'].index)
+            target_df=self.target_df
+            target_df['f1']=target_df['f1']/target_df['f1'].max()
+            target_df=target_df[self.target_df['file'].str.startswith('pharmit_'+str(num)+'_')==1].sort_values(by='f1',ascending=False)
+            for node in graph['pharm'].index:
+                pos=pharm_coords[node]
+                file_set=set(target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)]['file'])
+                file_sets.append(file_set)
+            #TODO take the max reward
+            interesection=set.intersection(*file_sets)
+            max_f1=0
+            for file in interesection:
+                f1=self.target_df.loc[self.target_df['file']==file]['f1'].values[0]
+                if f1>max_f1:
+                    max_f1=f1
+            reward=max_f1
         if done:
             next_state_dataloader=None
         return next_state_dataloader,done,reward
+    
+    def state_to_pharmit_query(graph,json_suffix,system):
+        '''converts the state to a pharmit query'''        
+        pharm_coords=graph['pharm'].index
+        pharm_coords=pharm_coords.tolist()
+        for coord in pharm_coords:
+            for point in system:
+                if np.allclose(coord,point['center']):
+                    feature=point['label']
+        '''pharm_coords=list(map(str,pharm_coords))
+        pharm_coords=','.join(pharm_coords)
+        with open(json_file_name,'w') as f:
+            f.write('{"pharmacophores":[')
+            f.write(pharm_coords)
+            f.write(']}')
+        return json_file_name'''
 
 def convert_to_list(string):
     """converts a string of a list to a list"""
