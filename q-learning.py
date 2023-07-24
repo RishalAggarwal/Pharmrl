@@ -37,7 +37,7 @@ def parse_arguments():
     parser.add_argument('--stochastic', type=bool, default=False, help='stochastic policy')
     parser.add_argument('--beam_search', type=bool, default=False, help='beam search')
     parser.add_argument('--beam_size', type=int, default=3, help='beam size')
-    parser.add_argument('--return_reward', type=bool, default=True, help='return reward')
+    parser.add_argument('--return_reward', type=str, default='dataframe', help='return reward')
     #environment parameters
     parser.add_argument('--top_dir', type=str, default='../Pharmnn/data')
     parser.add_argument('--train_file', type=str, default='../Pharmnn/data/train_pharmrl_dataset.txt')
@@ -46,6 +46,8 @@ def parse_arguments():
     parser.add_argument('--reward_type', type=str, default='f1', choices=['f1','length'])
     parser.add_argument('--pharm_pharm_radius', type=float, default=12)
     parser.add_argument('--protein_pharm_radius', type=float, default=8)
+    parser.add_argument('--pharmit_database', type=str, default='./data/covid_moonshot/covid_moonshot')
+    parser.add_argument('--actives_ism',type=str,default='./data/covid_moonshot/actives_smiles.ism')
     #model parameters
     parser.add_argument('--model_weights',type=str,default='')
     parser.add_argument('--in_pharm_node_features',type=int,default=32)
@@ -63,6 +65,7 @@ def parse_arguments():
     parser.add_argument('--wandb_run_name', type=str, default='')
     parser.add_argument('--save_model', type=bool, default=False)
     parser.add_argument('--save_path', type=str, default='')
+    parser.add_argument('--out_file', type=str, default='')
     args = parser.parse_args()
     return args
 
@@ -161,7 +164,7 @@ def remove_duplicates_nones(values,next_states,next_state_loaders,f1s,dones):
 
 
 
-def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,return_reward):
+def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,return_reward,args):
     
     values=[]
     next_states=[]
@@ -194,7 +197,7 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
                         dones_beam.append(True)
                         next_state_loaders_beam.append(None)
                     else:
-                        next_state_loader, done, current_f1 = env.step(next_state,t,test=True,current_graph=next_states[i],return_reward=return_reward)
+                        next_state_loader, done, current_f1 = env.step(next_state,t,test=True,current_graph=next_states[i],return_reward=return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
                         f1s_beam.append(current_f1)
                         dones_beam.append(done)
                         next_state_loaders_beam.append(next_state_loader)
@@ -218,7 +221,6 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
         values=values[values_index]
         values=list(values)
         values,next_states,next_state_loaders,f1s,dones=remove_duplicates_nones(values,next_states,next_state_loaders,f1s,dones)
-        print(values,f1s,dones)
         if len(values)>beam_size:
             values=values[:beam_size]
             next_states=next_states[:beam_size]
@@ -316,13 +318,13 @@ def main():
     if args.test_only:
         num_episodes=1
     for i_episode in range(num_episodes):
-        state_loader = env.reset()
+        state_loader = env.reset(return_reward=args.return_reward)
         state=None
         prev_f1=0
         cum_reward=0
         for t in range(num_steps):
             next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done)
-            next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward)
+            next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
             if args.reward_type=='f1':
                 reward=current_f1
                 cum_reward=current_f1
@@ -352,14 +354,15 @@ def main():
         if i_episode % num_tests == 0 or args.test_only:
             with torch.no_grad():
                 mean_test_f1=0
+                out_file=None
                 for i in range(len(env.systems_list[1])):
                     graphs_list=[]
                     values=[]
                     f1s=[]
-                    state_loader = env.loop_test()
+                    state_loader = env.loop_test(return_reward=args.return_reward)
                     if args.beam_search:
                         state=None
-                        state,steps_done,current_f1,value=beam_search(env,args.gamma,state,state_loader,policy_net,args.beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,args.return_reward)
+                        state,steps_done,current_f1,value=beam_search(env,args.gamma,state,state_loader,policy_net,args.beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,args.return_reward,args)
                         values.append(value)
                         f1s.append(current_f1)
                         graphs_list.append(state['pharm'].pos.tolist())
@@ -371,7 +374,7 @@ def main():
                                 next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True)
                             if args.test_only:
                                 graphs_list.append(next_state['pharm'].pos.tolist())
-                            next_state_loader, done, current_f1 = env.step(next_state,t,test=True,return_reward=args.return_reward)
+                            next_state_loader, done, current_f1 = env.step(next_state,t,test=True,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
                             state_loader = next_state_loader
                             state=next_state
                             if done or len(state_loader.dataset)==0:
@@ -380,10 +383,18 @@ def main():
                                     f1s.append(current_f1)
                                 break
                     if args.test_only:
-                        print(env.system)
-                        print(values[-1])
-                        print(max(f1s))
-                        print(graphs_list)
+                        if len(args.out_file)>0:
+                            if out_file is None:
+                                out_file=open(args.out_file,'w')
+                            out_file.write(str(env.system)+'\n')
+                            out_file.write(str(values[-1])+'\n')
+                            out_file.write(str(max(f1s))+'\n')
+                            out_file.write(str(graphs_list)+'\n')
+                        else:
+                            print(env.system)
+                            print(values[-1])
+                            print(max(f1s))
+                            print(graphs_list)
                     mean_test_f1+=current_f1
                 mean_test_f1/=len(env.systems_list[1])
                 wandb.log({'mean_test_f1':mean_test_f1})
