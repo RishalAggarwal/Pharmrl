@@ -43,6 +43,8 @@ def parse_arguments():
     parser.add_argument('--train_file', type=str, default='../Pharmnn/data/train_pharmrl_dataset.txt')
     parser.add_argument('--test_file', type=str, default='../Pharmnn/data/test_pharmrl_dataset.txt')
     parser.add_argument('--randomize', type=bool, default=True)
+    parser.add_argument('--parallel', type=bool, default=True)
+    parser.add_argument('--processes', type=int, default=4)
     parser.add_argument('--reward_type', type=str, default='f1', choices=['f1','length'])
     parser.add_argument('--pharm_pharm_radius', type=float, default=12)
     parser.add_argument('--protein_pharm_radius', type=float, default=8)
@@ -241,7 +243,7 @@ def main():
     wandb.init(project=args.wandb_project, name=args.wandb_run_name)
     wandb.config.update(args)
     
-    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,train_file=args.train_file,test_file=args.test_file,batch_size=args.batch_size,randomize=args.randomize,pharm_pharm_radius=args.pharm_pharm_radius,protein_pharm_radius=args.protein_pharm_radius)
+    env = pharm_env(max_steps=args.num_steps-1,top_dir=args.top_dir,train_file=args.train_file,test_file=args.test_file,batch_size=args.batch_size,randomize=args.randomize,pharm_pharm_radius=args.pharm_pharm_radius,protein_pharm_radius=args.protein_pharm_radius,parallel=args.parallel,pool_processes=args.processes)
     
     policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
     target_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)

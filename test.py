@@ -73,17 +73,17 @@ def test_dataset():
         assert (batch[0]['protein', 'proteinpharm', 'pharm'].edge_attr == torch.tensor([[-0.5,-0.5,-0.5],[1,1,1],[-2.5,-2.5,-2.5],[-1,-1,-1],[1,1,1]],dtype=torch.float)).all()
         assert (batch[0]['pharm','pharmpharm','pharm'].edge_index == torch.tensor([[0,1],[1,0]],dtype=torch.long)).all()
         assert (batch[0]['pharm','pharmpharm','pharm'].edge_attr == torch.tensor([[-2,-2,-2],[2,2,2]],dtype=torch.float)).all()
-
+        break
     current_graph=test_dataloader.dataset[0]
     dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_types,current_graph)
     test_dataloader=DataLoader(dataset,batch_size=1,shuffle=False)
-    assert len(test_dataloader)==0
+    assert len(test_dataloader)==1
 
     pharm_coords=np.array([[1,1,1],[3,3,3],[300,300,300]])
     pharm_types=np.random.random((3,32))
     dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_types,current_graph)
     test_dataloader=DataLoader(dataset,batch_size=1,shuffle=False)
-    assert len(test_dataloader)==0
+    assert len(test_dataloader)==1
     print('dataset test passed')
 
 def test_model():

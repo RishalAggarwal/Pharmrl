@@ -17,6 +17,7 @@ from itertools import count
 import random
 import json
 import subprocess
+import sys
 
 class MyCoordinateSet:
     
@@ -47,7 +48,10 @@ class ReplayMemory(object):
 
 class pharm_env():
     
-    def __init__(self,max_steps,top_dir,train_file,test_file,batch_size,randomize=True,pharm_pharm_radius=6,protein_pharm_radius=7):
+    def __init__(self,max_steps,top_dir,train_file,test_file,batch_size,randomize=True,pharm_pharm_radius=6,protein_pharm_radius=7,parallel=False,pool_processes=1):
+        
+        self.parallel=parallel
+        self.pool_processes=pool_processes
         self.curent_step=0
         self.max_steps=max_steps
         self.dataset=None
@@ -109,6 +113,9 @@ class pharm_env():
         if return_reward=='dataframe':
             dir=self.system.split('anddude')[0].split('/')[-2]
             self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+dir+'/target_df.pkl','rb'))
+        if return_reward=='dude_pharmit':
+            dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
+            self.target_df=pickle.load(open(self.top_dir+'/'+dir+'/target_df.pkl','rb'))
         return state_dataloader
     
     def loop_test(self,return_reward='dataframe'):
@@ -120,6 +127,9 @@ class pharm_env():
         if return_reward=='dataframe':
             dir=self.system.split('anddude')[0].split('/')[-2]
             self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+dir+'/target_df.pkl','rb'))
+        if return_reward=='dude_pharmit':
+            dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
+            self.target_df=pickle.load(open(self.top_dir+'/'+dir+'/target_df.pkl','rb'))
         return state_dataloader
 
     def create_state(self,system,cache,graph=None):
@@ -129,7 +139,7 @@ class pharm_env():
         protein_types=protein.c.type_index.tonumpy()
         pharm_coords=cache[0]['centers']
         pharm_feats=cache[0]['feature_vector']
-        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius)
+        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius,parallel=self.parallel,pool_processes=self.pool_processes)
         self.current_graph=dataset.current_graph
         dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False)
         return dataloader
@@ -174,15 +184,25 @@ class pharm_env():
                 if f1>max_f1:
                     max_f1=f1
             reward=max_f1
-        elif return_reward=='pharmit_query':
+        elif return_reward=='pharmit_query' or 'dude_pharmit':
             if num<3:
                 reward=0
             else:
                 json_fname=self.state_to_pharmit_query(graph,'_pharmit',cache)
+                if return_reward=='dude_pharmit':
+                    dir=system.split('crystal_ligand.mol2')[0].split('/')[0]
+                    pharmit_database=self.top_dir+'/'+dir+'/pharmit_db'
+                    actives_ism=self.top_dir+'/'+dir+'/actives_final.ism'
                 output=subprocess.check_output('python getf1.py '+json_fname+' '+pharmit_database+' --actives '+actives_ism,shell=True)
                 output=output.decode()
-                output=output.split(' ')
-                reward=float(output[1])
+                output_reward=output.split(' ')
+                try:
+                    reward=float(output_reward[1])
+                except:
+                    sys.exit('pharmit error')
+                if return_reward=='dude_pharmit':
+                    reward=reward/self.target_df['f1'].max()
+                    reward=min(reward,2 + (0.1*reward))
         if done:
             next_state_dataloader=None
         return next_state_dataloader,done,reward
