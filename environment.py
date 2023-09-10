@@ -211,16 +211,21 @@ class pharm_env():
         '''converts the state to a pharmit query'''        
         pharm_index=graph['pharm'].index
         pharm_index=pharm_index.tolist()
+        cache=system_cache[0]
         pharmit_points={}
         pharmit_points["points"]=[]
-        cache=system_cache[0]
+        pharmit_points["exselect"] = "receptor"
+        pharmit_points["extolerance"] = 1
+        pharmit_points["recname"] = cache['pdbfile']
+        pdb_file=open(self.top_dir+'/'+cache['pdbfile'],'r').readlines()
+        pharmit_points["receptor"] = ''.join(pdb_file)
         for node in pharm_index:
             coord=cache['centers'][node]
             features=cache['label'][node]
             for feature in features.split(':'):
                 radius=1
                 if 'Hydrogen' in feature:
-                    radius=0.5
+                    radius=1
                 point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2]}
                 pharmit_points["points"].append(point_dict)
         json_fname=self.top_dir+'/'+cache['sdffile'].split('.sdf')[0]+json_suffix+'.json'
