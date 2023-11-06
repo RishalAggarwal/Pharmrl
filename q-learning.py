@@ -28,6 +28,7 @@ def parse_arguments():
     parser.add_argument('--tau', type=float, default=1)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--memory_size', type=int, default=1000)
+    parser.add_argument('--min_features', type=int, default=3)
     parser.add_argument('--target_update', type=int, default=1)
     parser.add_argument('--num_episodes', type=int, default=10000)
     parser.add_argument('--num_steps', type=int, default=10)
@@ -73,7 +74,7 @@ def parse_arguments():
 
 
 
-def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilon_decay,steps_done,test=False,stochastic=False,remove_state=False,time_step=0):
+def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilon_decay,steps_done,test=False,stochastic=False,remove_state=False,time_step=0,min_features=3):
     
     if test:
         eps_threshold=0
@@ -111,7 +112,7 @@ def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilo
                     return None,steps_done,0
             if index==len(state_loader.dataset)-1 and not remove_state:
                 #if terminated without building a graph
-                if len(state_loader.dataset[index]['pharm'].index)<3:
+                if len(state_loader.dataset[index]['pharm'].index)<min_features:
                     values.pop(-1)
                     index=values.index(max(values))
                     return state_loader.dataset[index],steps_done,values[index]
@@ -125,7 +126,7 @@ def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilo
         index=random.randrange(len(state_loader.dataset))
         if index==len(state_loader.dataset)-1:
             #if terminated without building a graph
-            if state is None or len(state['pharm'].index)<3:
+            if state is None or len(state['pharm'].index)<min_features:
                 index=random.randrange(len(state_loader.dataset)-1)
                 return state_loader.dataset[index],steps_done,0
             else:
@@ -191,7 +192,7 @@ def beam_search(env,gamma,state,state_loader,policy_net,beam_size,epsilon_start,
                     remove_state=False
                     if j>0:
                         remove_state=True
-                    next_state,steps_done,value=select_action(next_states[i],next_state_loaders[i],policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True,stochastic=False,remove_state=remove_state,time_step=t)
+                    next_state,steps_done,value=select_action(next_states[i],next_state_loaders[i],policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True,stochastic=False,remove_state=remove_state,time_step=t,min_features=args.min_features)
                     values_beam.append(value)
                     next_states_beam.append(next_state)
                     if next_state is None:
@@ -325,7 +326,7 @@ def main():
         prev_f1=0
         cum_reward=0
         for t in range(num_steps):
-            next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done)
+            next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,min_features=args.min_features)
             next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
             if args.reward_type=='f1':
                 reward=current_f1
@@ -372,9 +373,9 @@ def main():
                     else:
                         for t in range(num_test_steps):
                             if args.stochastic:
-                                next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True,stochastic=True)
+                                next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True,stochastic=True,min_features=args.min_features)
                             else:
-                                next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True)
+                                next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,test=True,min_features=args.min_features)
                             if args.test_only:
                                 graphs_list.append(next_state['pharm'].pos.tolist())
                             next_state_loader, done, current_f1 = env.step(next_state,t,test=True,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
