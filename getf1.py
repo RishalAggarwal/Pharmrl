@@ -10,7 +10,7 @@ args = parser.parse_args()
 
 try:
     num_actives = len(open(args.actives).readlines()) # count lines
-    output = subprocess.check_output(f'./data/Mpro_XChem_screen_active_site_11-May-2020/pharmit dbsearch -dbdir {args.db} -in {args.query} -extra-info -max-orient=1 -reduceconfs=1',shell=True)
+    output = subprocess.check_output(f'./data/pharmit dbsearch -dbdir {args.db} -in {args.query} -extra-info -max-orient=1 -reduceconfs=1',shell=True)
     output = output.decode()
     lines = output.split('\n')
     hits = 0
