@@ -339,6 +339,7 @@ def main():
                     reward=0
                 cum_reward+=reward
             prev_f1=current_f1
+            wandb.log({'f1_score':current_f1})
             #sanity check
             transition=Transition(next_state,next_state_loader,reward)
             memory.push(transition)
@@ -352,7 +353,7 @@ def main():
             for param, target_param in zip(policy_net.parameters(), target_net.parameters()):
                 target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
         if not args.test_only:
-            wandb.log({'graph_length':len(next_state['pharm'].index),'reward':cum_reward,'episode':i_episode,'f1_score':current_f1})
+            wandb.log({'graph_length':len(next_state['pharm'].index),'reward':cum_reward,'episode':i_episode})
         if i_episode % num_tests == 0 or args.test_only:
             with torch.no_grad():
                 mean_test_f1=0
