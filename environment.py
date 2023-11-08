@@ -9,7 +9,7 @@ try:
 except ImportError:
     from openbabel import pybel
 import pandas as pd
-from dataset import graphdataset
+from graphdataset import graphdataset
 import pickle
 from torch_geometric.data import DataLoader
 from collections import namedtuple, deque
@@ -141,7 +141,7 @@ class pharm_env():
         pharm_feats=cache[0]['feature_vector']
         dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius,parallel=self.parallel,pool_processes=self.pool_processes)
         self.current_graph=dataset.current_graph
-        dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False)
+        dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False,drop_last=False)
         return dataloader
 
     def step(self,graph,current_step,test=False,current_graph=None,return_reward='dataframe',pharmit_database='',actives_ism=''):
@@ -241,3 +241,78 @@ def convert_to_list(string):
     string=string.split(',')
     string=list(map(float,string))
     return string
+
+class Inference_environment():
+
+    def __init__(self,receptor,receptor_string,feature_points,cnn_hidden_features,batch_size,top_dir,pharm_pharm_radius=6,protein_pharm_radius=7,max_steps=10,parallel=False,pool_processes=1):
+        self.receptor=receptor
+        self.receptor_string=receptor_string
+        self.feature_points=feature_points
+        self.cnn_hidden_features=cnn_hidden_features.detach().cpu().numpy()
+        self.current_step=0
+        self.max_steps=max_steps
+        self.batch_size=batch_size
+        self.top_dir=top_dir
+        self.pharm_pharm_radius=pharm_pharm_radius
+        self.protein_pharm_radius=protein_pharm_radius
+        self.parallel=parallel
+        self.pool_processes=pool_processes
+        self.current_graph=None
+
+    def create_state(self,graph=None):
+        '''return the state dataloader for the current system'''
+        protein=self.receptor
+        protein_coords=protein.coords.tonumpy()
+        protein_types=protein.type_index.tonumpy()
+        pharm_coords=np.array(self.feature_points[:,1:4],dtype=np.float32)
+        pharm_feats=self.cnn_hidden_features
+        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius,parallel=self.parallel,pool_processes=self.pool_processes)
+        self.current_graph=dataset.current_graph
+        dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False,drop_last=False)
+        return dataloader 
+
+    def reset(self):
+        self.current_step=0
+        return self.create_state()
+    
+    def step(self,graph,current_step):
+        if current_step>=self.max_steps or graph==self.current_graph:
+            done=True
+        else:
+            done=False
+            next_state_dataloader=self.create_state(graph)
+            self.current_graph=graph
+            if len(next_state_dataloader.dataset)==0:
+                done=True
+        if done:
+            next_state_dataloader=None
+        return next_state_dataloader,done
+    
+    def state_to_json(self,graph,label=None):
+        pharm_index=graph['pharm'].index
+        pharm_index=pharm_index.tolist()
+        pharmit_points={}
+        pharmit_points["points"]=[]
+        pharmit_points["exselect"] = "receptor"
+        pharmit_points["extolerance"] = 1
+        pharmit_points["recname"] = 'receptor.pdb'
+        pharmit_points["receptor"] = self.receptor_string
+        for node in pharm_index:
+            coord=self.feature_points[node,1:4]
+            features=self.feature_points[node,0]
+            for feature in features.split(':'):
+                radius=1
+                if 'Hydrogen' in feature:
+                    radius=1
+                if label is not None:
+                    point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"label": label}
+                else:
+                    point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2]}
+                pharmit_points["points"].append(point_dict)
+        return pharmit_points
+
+
+        
+
+
+        
