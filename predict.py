@@ -59,6 +59,8 @@ def parse_arguments():
     parser.add_argument('--z_size', type=float, default=None)
     parser.add_argument('--input_json', type=str, default='')
     parser.add_argument('--combine', action='store_true',default=False,  help='combine provided and predicted pharmacophore points')
+    parser.add_argument('--cnn_only', action='store_true',default=False,  help='use only predicted pharmacophore points')
+    parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
     parser.add_argument('--pharmnn_session', type=str, default=None,help='reload previous pharmnn features and points')
     parser.add_argument('--dump_pharmnn', type=str, default=None,help='pharmnn dump file name')
 
@@ -171,6 +173,15 @@ def main(args):
     if len(args.input_json)>0:
         input_json=extract_json(args.input_json)
         points_df=pd.DataFrame(input_json['points'])
+        points_df=points_df[points_df['enabled']==True]
+        #take only name,x,y,z columns
+        points_df=points_df[['name','x','y','z']]
+        #rename name column as Feature
+        points_df=points_df.rename(columns={'name':'Feature'})
+        #drop comlumns where Feature is InclusionSphere
+        points_df=points_df[points_df.Feature != 'InclusionSphere']
+        #reset index
+        points_df=points_df.reset_index(drop=True)
     else:
         input_json=None
     receptor=args.receptor
@@ -229,10 +240,11 @@ def main(args):
                 setattr(args,'autobox_extend',0)
                 #TODO output ligand.pdb and read into coordinateset
 
+        
         dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate)
         
         #get the pharmacophore points
-        if input_json is None or args.combine:
+        if input_json is None or args.combine or args.cnn_only:
             if args.verbose:
                 print('predicting pharmacophore feature points')
             
@@ -242,6 +254,11 @@ def main(args):
             predicted_feature_points=returned_lists[0][0][0]
             predicted_feature_points_df=dict_to_df(predicted_feature_points)
             dataset.add_points(predicted_feature_points_df)
+        
+        if (args.ligand_only or args.combine) and input_json is not None:
+            if args.verbose:
+                print('adding provided pharmacophore feature points')
+            dataset.add_points(points_df)
 
         if args.verbose:
             print('getting cnn hidden features')
