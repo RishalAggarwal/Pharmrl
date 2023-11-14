@@ -28,9 +28,9 @@ try:
 except ImportError:
     from openbabel import pybel
 try:
-    import molgrid.openbabel
+    import molgrid.openbabel as ob
 except ImportError:
-    import openbabel
+    import openbabel as ob
 import molgrid
 from molgrid import CoordinateSet
 from environment import Inference_environment
@@ -169,6 +169,8 @@ def pharm_rec_df(rdmol,obmol):
 
 def main(args):
 
+    #TODO starter pharmacophore points
+
     points_df=None
     if len(args.input_json)>0:
         input_json=extract_json(args.input_json)
@@ -228,18 +230,21 @@ def main(args):
                 y_max=args.y_center+args.y_size/2
                 z_min=args.z_center-args.z_size/2
                 z_max=args.z_center+args.z_size/2
-                ligand=pybel.readstring("smi","")
-                atom_1 = openbabel.OBAtom()
+                ligand=ob.OBMol()
+                ligand=pybel.Molecule(ligand)
+                atom_1 = ob.OBAtom()
                 atom_1.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
                 atom_1.SetVector(x_min, y_min, z_min)  # Set 3D coordinates (x, y, z)
-                atom_2 = openbabel.OBAtom()
+                atom_2 = ob.OBAtom()
                 atom_2.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
                 atom_2.SetVector(x_max, y_max, z_max)  # Set 3D coordinates (x, y, z)
                 ligand.OBMol.AddAtom(atom_1)
                 ligand.OBMol.AddAtom(atom_2)
                 setattr(args,'autobox_extend',0)
                 #TODO output ligand.pdb and read into coordinateset
-
+                ligand.write('pdb','ligand.pdb',overwrite=True)
+                ligand=coord_reader.make_coords('ligand.pdb')
+                os.remove('ligand.pdb')
         
         dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate)
         
