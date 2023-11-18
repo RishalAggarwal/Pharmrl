@@ -119,7 +119,7 @@ def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilo
                 else:
                     return state,steps_done,values[index]
             #graph length < 3 cant have value > 0 #for beam search
-            if len(state_loader.dataset[index]['pharm'].index)<3 and time_step>1:
+            if len(state_loader.dataset[index]['pharm'].index)<min_features and time_step>1:
                 return state_loader.dataset[index],steps_done,0
     else:
         #account for termination of graph

@@ -58,6 +58,7 @@ def parse_arguments():
     parser.add_argument('--y_size', type=float, default=None)
     parser.add_argument('--z_size', type=float, default=None)
     parser.add_argument('--input_json', type=str, default='')
+    parser.add_argument('--starter_json', type=str, default='',help='starter pharmacophore points')
     parser.add_argument('--combine', action='store_true',default=False,  help='combine provided and predicted pharmacophore points')
     parser.add_argument('--cnn_only', action='store_true',default=False,  help='use only predicted pharmacophore points')
     parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
@@ -166,24 +167,27 @@ def pharm_rec_df(rdmol,obmol):
     df=dict_to_df(pharm_rec_features)
     return df
 
+def points_to_df(points):
+    points_df=pd.DataFrame(points)
+    points_df=points_df[points_df['enabled']==True]
+    #take only name,x,y,z columns
+    points_df=points_df[['name','x','y','z']]
+    #rename name column as Feature
+    points_df=points_df.rename(columns={'name':'Feature'})
+    #drop comlumns where Feature is InclusionSphere
+    points_df=points_df[points_df.Feature != 'InclusionSphere']
+    #reset index
+    points_df=points_df.reset_index(drop=True)
+    return points_df
 
 def main(args):
 
     #TODO starter pharmacophore points
-
+    starter_points_df=None
     points_df=None
     if len(args.input_json)>0:
         input_json=extract_json(args.input_json)
-        points_df=pd.DataFrame(input_json['points'])
-        points_df=points_df[points_df['enabled']==True]
-        #take only name,x,y,z columns
-        points_df=points_df[['name','x','y','z']]
-        #rename name column as Feature
-        points_df=points_df.rename(columns={'name':'Feature'})
-        #drop comlumns where Feature is InclusionSphere
-        points_df=points_df[points_df.Feature != 'InclusionSphere']
-        #reset index
-        points_df=points_df.reset_index(drop=True)
+        points_df=points_to_df(input_json['points'])
     else:
         input_json=None
     receptor=args.receptor
@@ -207,6 +211,11 @@ def main(args):
         receptor_pybel=next(pybel.readfile("pdb", os.path.join(args.top_dir,receptor)))
         receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=True)
         receptor=coord_reader.make_coords(receptor)
+    
+    if len(args.starter_json)>0:
+        starter_json=extract_json(args.starter_json)
+        starter_points_df=points_to_df(starter_json['points'])
+        
 
    
     if args.pharmnn_session is None:
@@ -246,7 +255,7 @@ def main(args):
                 ligand=coord_reader.make_coords('ligand.pdb')
                 os.remove('ligand.pdb')
         
-        dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate)
+        dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
         
         #get the pharmacophore points
         if input_json is None or args.combine or args.cnn_only:
@@ -312,7 +321,7 @@ def main(args):
             next_state_dataloader,done=pharm_env.step(next_state,steps_done)
             state=next_state
             state_loader=next_state_dataloader
-        json_dict=pharm_env.state_to_json(state,label=model)
+        json_dict=pharm_env.state_to_json(state,label=model,min_features=args.min_features)
         json.dump(json_dict,open('pharmnn_'+model.split('/')[1].split('.')[0]+'.json','w'))
 
         

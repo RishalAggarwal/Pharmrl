@@ -248,6 +248,7 @@ class Inference_environment():
         self.receptor=receptor
         self.receptor_string=receptor_string
         self.feature_points=feature_points
+        self.starter_points=feature_points[:,-1]
         self.cnn_hidden_features=cnn_hidden_features.detach().cpu().numpy()
         self.current_step=0
         self.max_steps=max_steps
@@ -256,23 +257,25 @@ class Inference_environment():
         self.pharm_pharm_radius=pharm_pharm_radius
         self.protein_pharm_radius=protein_pharm_radius
         self.parallel=parallel
-        self.pool_processes=pool_processes
+        self.pool_processes=pool_processes  
         self.current_graph=None
 
-    def create_state(self,graph=None):
+    def create_state(self,graph=None,starter_points=None):
         '''return the state dataloader for the current system'''
         protein=self.receptor
         protein_coords=protein.coords.tonumpy()
         protein_types=protein.type_index.tonumpy()
         pharm_coords=np.array(self.feature_points[:,1:4],dtype=np.float32)
         pharm_feats=self.cnn_hidden_features
-        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius,parallel=self.parallel,pool_processes=self.pool_processes)
+        dataset=graphdataset(protein_coords,protein_types,pharm_coords,pharm_feats,current_graph=graph,pharm_pharm_radius=self.pharm_pharm_radius,protein_pharm_radius=self.protein_pharm_radius,parallel=self.parallel,pool_processes=self.pool_processes,starter_points=starter_points)
         self.current_graph=dataset.current_graph
         dataloader=DataLoader(dataset,batch_size=self.batch_size,shuffle=False,drop_last=False)
         return dataloader 
 
     def reset(self):
         self.current_step=0
+        if self.starter_points.any():
+            return self.create_state(starter_points=self.starter_points)
         return self.create_state()
     
     def step(self,graph,current_step):
@@ -288,8 +291,10 @@ class Inference_environment():
             next_state_dataloader=None
         return next_state_dataloader,done
     
-    def state_to_json(self,graph,label=None):
+    def state_to_json(self,graph,label=None,min_features=3):
         pharm_index=graph['pharm'].index
+        if len(pharm_index)<min_features:
+            print('not enough features around selected set to form pharmacophore of full size')
         pharm_index=pharm_index.tolist()
         pharmit_points={}
         pharmit_points["points"]=[]
