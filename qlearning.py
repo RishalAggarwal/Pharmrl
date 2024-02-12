@@ -321,35 +321,36 @@ def main():
     if args.test_only:
         num_episodes=1
     for i_episode in range(num_episodes):
-        state_loader = env.reset(return_reward=args.return_reward)
-        state=None
-        prev_f1=0
-        cum_reward=0
-        for t in range(num_steps):
-            next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,min_features=args.min_features)
-            next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
-            if args.reward_type=='f1':
-                reward=current_f1
-                cum_reward=current_f1
-            else:
-                if prev_f1==current_f1:
-                    reward=0
-                elif current_f1>prev_f1:
-                    reward=1
+        if not args.test_only:
+            state_loader = env.reset(return_reward=args.return_reward)
+            state=None
+            prev_f1=0
+            cum_reward=0
+            for t in range(num_steps):
+                next_state,steps_done,value = select_action(state,state_loader,policy_net,epsilon_start,epsilon_min,epsilon_decay,steps_done,min_features=args.min_features)
+                next_state_loader, done, current_f1 = env.step(next_state,t,return_reward=args.return_reward,pharmit_database=args.pharmit_database,actives_ism=args.actives_ism)
+                if args.reward_type=='f1':
+                    reward=current_f1
+                    cum_reward=current_f1
                 else:
-                    reward=0
-                cum_reward+=reward
-            prev_f1=current_f1
-            wandb.log({'f1_score':current_f1})
-            #sanity check
-            transition=Transition(next_state,next_state_loader,reward)
-            memory.push(transition)
-            state_loader = next_state_loader
-            state=next_state
-            if not args.test_only:
-                optimize_model()
-            if done or len(state_loader.dataset)==0:
-                break
+                    if prev_f1==current_f1:
+                        reward=0
+                    elif current_f1>prev_f1:
+                        reward=1
+                    else:
+                        reward=0
+                    cum_reward+=reward
+                prev_f1=current_f1
+                wandb.log({'f1_score':current_f1})
+                #sanity check
+                transition=Transition(next_state,next_state_loader,reward)
+                memory.push(transition)
+                state_loader = next_state_loader
+                state=next_state
+                if not args.test_only:
+                    optimize_model()
+                if done or len(state_loader.dataset)==0:
+                    break
         if i_episode % target_update == 0 and not args.test_only:
             for param, target_param in zip(policy_net.parameters(), target_net.parameters()):
                 target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
@@ -360,12 +361,13 @@ def main():
                 mean_test_f1=0
                 out_file=None
                 for i in range(len(env.systems_list[1])):
+                    print(env.systems_list[1][i])
                     graphs_list=[]
                     values=[]
                     f1s=[]
                     state_loader = env.loop_test(return_reward=args.return_reward)
+                    state=None
                     if args.beam_search:
-                        state=None
                         state,steps_done,current_f1,value=beam_search(env,args.gamma,state,state_loader,policy_net,args.beam_size,epsilon_start,epsilon_min,epsilon_decay,steps_done,num_test_steps,args.return_reward,args)
                         values.append(value)
                         f1s.append(current_f1)

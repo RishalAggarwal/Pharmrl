@@ -18,6 +18,7 @@ import random
 import json
 import subprocess
 import sys
+import math
 
 class MyCoordinateSet:
     
@@ -104,18 +105,27 @@ class pharm_env():
                 np.random.shuffle(self.systems_list[0])
         self.train_system_index=-1
         self.test_system_index=-1
+        self.system_dir=None
+
+    def get_target_df(self,return_reward='dataframe'):
+        if return_reward=='dataframe':
+            self.system_dir=self.system.split('anddude')[0].split('/')[-2]
+            self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+self.system_dir+'/target_df.pkl','rb'))
+        if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
+            try:
+                self.system_dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
+                self.target_df=pickle.load(open(self.top_dir+'/'+self.system_dir+'/target_df.pkl','rb'))
+            except:
+                self.system_dir=self.system.split('anddude')[0].split('/')[-2]
+                self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+self.system_dir+'/target_df.pkl','rb'))
+        return self.target_df,self.system_dir
 
     def reset(self,return_reward='dataframe'):
         self.train_system_index+=1
         self.train_system_index=self.train_system_index%len(self.systems_list[0])
         self.system=self.systems_list[0][self.train_system_index]
         state_dataloader=self.create_state(self.systems_list[0][self.train_system_index],self.system_to_cache[self.systems_list[0][self.train_system_index]])
-        if return_reward=='dataframe':
-            dir=self.system.split('anddude')[0].split('/')[-2]
-            self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+dir+'/target_df.pkl','rb'))
-        if return_reward=='dude_pharmit':
-            dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
-            self.target_df=pickle.load(open(self.top_dir+'/'+dir+'/target_df.pkl','rb'))
+        self.target_df,self.system_dir=self.get_target_df(return_reward)
         return state_dataloader
     
     def loop_test(self,return_reward='dataframe'):
@@ -124,12 +134,7 @@ class pharm_env():
         self.test_system_index=self.test_system_index%len(self.systems_list[1])
         state_dataloader=self.create_state(self.systems_list[1][self.test_system_index],self.system_to_cache[self.systems_list[1][self.test_system_index]])
         self.system=self.systems_list[1][self.test_system_index]
-        if return_reward=='dataframe':
-            dir=self.system.split('anddude')[0].split('/')[-2]
-            self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+dir+'/target_df.pkl','rb'))
-        if return_reward=='dude_pharmit':
-            dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
-            self.target_df=pickle.load(open(self.top_dir+'/'+dir+'/target_df.pkl','rb'))
+        self.target_df=self.get_target_df(return_reward)
         return state_dataloader
 
     def create_state(self,system,cache,graph=None):
@@ -184,41 +189,53 @@ class pharm_env():
                 if f1>max_f1:
                     max_f1=f1
             reward=max_f1
-        elif return_reward=='pharmit_query' or 'dude_pharmit':
+        elif return_reward=='pharmit_query' or 'dude_pharmit' or 'dude_ligand_pharmit':
             if num<3:
                 reward=0
             else:
-                json_fname=self.state_to_pharmit_query(graph,'_pharmit',cache)
-                if return_reward=='dude_pharmit':
-                    dir=system.split('crystal_ligand.mol2')[0].split('/')[0]
-                    pharmit_database=self.top_dir+'/'+dir+'/pharmit_db'
-                    actives_ism=self.top_dir+'/'+dir+'/actives_final.ism'
-                output=subprocess.check_output('python getf1.py '+json_fname+' '+pharmit_database+' --actives '+actives_ism,shell=True)
+                json_fname=self.state_to_pharmit_query(graph,'_pharmit',cache, ligand_only=(return_reward=='dude_ligand_pharmit'))
+                if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
+                    pharmit_db_suffix=pharmit_database
+                    if 'dude' in self.top_dir:
+                        pharmit_database=self.top_dir+'/'+self.system_dir+'/'+pharmit_db_suffix
+                        actives_ism=self.top_dir+'/'+self.system_dir+'/actives_final.ism'
+                    else:
+                        pharmit_database=self.top_dir+'/dude/all/'+self.system_dir+'/'+pharmit_db_suffix
+                        actives_ism=self.top_dir+'/dude/all/'+self.system_dir+'/actives_final.ism'
+                else:
+                    pharmit_database=self.top_dir+'/'+self.system_dir+'/'+pharmit_db_suffix
+                    actives_ism=self.top_dir+'/'+self.system_dir+'/actives_final.ism'
+                decoys_ism=actives_ism.replace('actives','decoys')
+                output=subprocess.check_output('python getf1.py '+json_fname+' '+pharmit_database+' --actives '+actives_ism+' --decoys '+decoys_ism,shell=True)
                 output=output.decode()
                 output_reward=output.split(' ')
+                print(output_reward)
                 try:
                     reward=float(output_reward[1])
                 except:
                     sys.exit('pharmit error')
-                if return_reward=='dude_pharmit':
+                if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
+                    if type(self.target_df)==tuple:
+                        self.target_df=self.target_df[0]
                     reward=reward/self.target_df['f1'].max()
                     reward=min(reward,2 + (0.1*reward))
         if done:
             next_state_dataloader=None
         return next_state_dataloader,done,reward
     
-    def state_to_pharmit_query(self,graph,json_suffix,system_cache):
+    def state_to_pharmit_query(self,graph,json_suffix,system_cache,ligand_only=False):
         '''converts the state to a pharmit query'''        
         pharm_index=graph['pharm'].index
         pharm_index=pharm_index.tolist()
         cache=system_cache[0]
         pharmit_points={}
         pharmit_points["points"]=[]
-        pharmit_points["exselect"] = "receptor"
-        pharmit_points["extolerance"] = 1
-        pharmit_points["recname"] = cache['pdbfile']
-        pdb_file=open(self.top_dir+'/'+cache['pdbfile'],'r').readlines()
-        pharmit_points["receptor"] = ''.join(pdb_file)
+        if not ligand_only:
+            pharmit_points["exselect"] = "receptor"
+            pharmit_points["extolerance"] = 1
+            pharmit_points["recname"] = cache['pdbfile']
+            pdb_file=open(self.top_dir+'/'+cache['pdbfile'],'r').readlines()
+            pharmit_points["receptor"] = ''.join(pdb_file)
         for node in pharm_index:
             coord=cache['centers'][node]
             features=cache['label'][node]
@@ -226,8 +243,22 @@ class pharm_env():
                 radius=1
                 if 'Hydrogen' in feature:
                     radius=1
-                point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2]}
+                point_dict={"enabled": True,"name": feature, "radius":radius, "size": 1, "x":coord[0],"y":coord[1],"z":coord[2]}
+                if ligand_only:
+                    if type(self.target_df)==tuple:
+                        target_df=self.target_df[0]
+                    else:
+                        target_df=self.target_df
+                    pos=coord
+                    vector=target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)&(target_df['name']==feature)]['vector']
+                    svector=target_df[(np.abs(target_df['x']-pos[0])<5e-3)&(np.abs(target_df['y']-pos[1])<5e-3)&(np.abs(target_df['z']-pos[2])<5e-3)&(target_df['name']==feature)]['svector'] 
+                    if vector.values[0]==vector.values[0]:
+                        point_dict['vector']=vector.values[0]
+                    if svector.values[0]==svector.values[0]:
+                        point_dict['svector']=svector.values[0]
                 pharmit_points["points"].append(point_dict)
+                if ligand_only:
+                    break
         json_fname=self.top_dir+'/'+cache['sdffile'].split('.sdf')[0]+json_suffix+'.json'
         with open(json_fname,'w') as f:
             json.dump(pharmit_points,f)
