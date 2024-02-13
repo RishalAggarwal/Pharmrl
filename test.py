@@ -8,7 +8,7 @@ try:
 except ImportError:
     from openbabel import pybel
 import pandas as pd
-from dataset import graphdataset
+from graphdataset import graphdataset
 import pickle
 from torch_geometric.data import DataLoader
 from collections import namedtuple, deque

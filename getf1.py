@@ -6,10 +6,13 @@ parser = argparse.ArgumentParser(description='Run pharmit on specified database 
 parser.add_argument("query",help="Query file (json) to search with")
 parser.add_argument("db",help="Pharmit database to search")
 parser.add_argument("--actives",default="actives_final.ism",help="Name of actives smiles file",required=False)
+parser.add_argument("--decoys",default="decoys_final.ism",help="Name of decoys smiles file",required=False)
 args = parser.parse_args()
 
 try:
+    num_decoys = len(open(args.decoys).readlines()) # count lines
     num_actives = len(open(args.actives).readlines()) # count lines
+    num_total = num_decoys + num_actives
     output = subprocess.check_output(f'./data/pharmit dbsearch -dbdir {args.db} -in {args.query} -extra-info -max-orient=1 -reduceconfs=1',shell=True)
     output = output.decode()
     lines = output.split('\n')
@@ -31,7 +34,9 @@ try:
     else:
         precision = tp/hits
         f1 = 2*(precision*recall)/(precision+recall)
+    enrichment_factor = precision/(num_actives/num_total)
+    hit_rate = hits/num_total
 
-    print(f'F1: {f1:5f} Recall: {recall:5f} Precision: {precision:5f}')
+    print(f'F1: {f1:5f} Recall: {recall:5f} Precision: {precision:5f} Hit rate: {hit_rate:5f} Enrichment Factor: {enrichment_factor:5f}')
 except:
     print('error')
