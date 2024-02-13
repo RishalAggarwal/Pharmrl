@@ -361,7 +361,6 @@ def main():
                 mean_test_f1=0
                 out_file=None
                 for i in range(len(env.systems_list[1])):
-                    print(env.systems_list[1][i])
                     graphs_list=[]
                     values=[]
                     f1s=[]

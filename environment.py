@@ -194,22 +194,18 @@ class pharm_env():
                 reward=0
             else:
                 json_fname=self.state_to_pharmit_query(graph,'_pharmit',cache, ligand_only=(return_reward=='dude_ligand_pharmit'))
+                pharmit_db_suffix=pharmit_database
                 if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
-                    pharmit_db_suffix=pharmit_database
                     if 'dude' in self.top_dir:
                         pharmit_database=self.top_dir+'/'+self.system_dir+'/'+pharmit_db_suffix
                         actives_ism=self.top_dir+'/'+self.system_dir+'/actives_final.ism'
                     else:
                         pharmit_database=self.top_dir+'/dude/all/'+self.system_dir+'/'+pharmit_db_suffix
                         actives_ism=self.top_dir+'/dude/all/'+self.system_dir+'/actives_final.ism'
-                else:
-                    pharmit_database=self.top_dir+'/'+self.system_dir+'/'+pharmit_db_suffix
-                    actives_ism=self.top_dir+'/'+self.system_dir+'/actives_final.ism'
                 decoys_ism=actives_ism.replace('actives','decoys')
                 output=subprocess.check_output('python getf1.py '+json_fname+' '+pharmit_database+' --actives '+actives_ism+' --decoys '+decoys_ism,shell=True)
                 output=output.decode()
                 output_reward=output.split(' ')
-                print(output_reward)
                 try:
                     reward=float(output_reward[1])
                 except:
