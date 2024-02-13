@@ -207,9 +207,15 @@ def main(args):
         receptor=coord_reader.make_coords('receptor.pdb')
         os.remove('receptor.pdb')
     else:
-        receptor_string=''.join(open(os.path.join(args.top_dir,receptor),'r').readlines())
-        receptor_pybel=next(pybel.readfile("pdb", os.path.join(args.top_dir,receptor)))
-        receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=True)
+        file_suffix=receptor.split('.')[-1]
+        receptor_pybel=next(pybel.readfile(file_suffix, os.path.join(args.top_dir,receptor)))
+        if file_suffix=='pdb':
+            receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=True)
+        elif file_suffix=='mol2':
+            receptor_rdmol=rdmolfiles.MolFromMol2File(os.path.join(args.top_dir,receptor),sanitize=True)
+        elif file_suffix=='mol':
+            receptor_rdmol=rdmolfiles.MolFromMolFile(os.path.join(args.top_dir,receptor),sanitize=True)
+        receptor_string=Chem.MolToPDBBlock(receptor_rdmol)
         receptor=coord_reader.make_coords(receptor)
     
     if len(args.starter_json)>0:
