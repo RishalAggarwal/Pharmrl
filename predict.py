@@ -64,6 +64,7 @@ def parse_arguments():
     parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
     parser.add_argument('--pharmnn_session', type=str, default=None,help='reload previous pharmnn features and points')
     parser.add_argument('--dump_pharmnn', type=str, default=None,help='pharmnn dump file name')
+    parser.add_argument('--output_prefix', type=str, default='pharmnn',help='prefix for output json session files')
 
     #cnn_feature_points_parameters
     parser.add_argument('--cnn_batch_size',default=512,type=int,help='cnn batch size')
@@ -193,48 +194,57 @@ def main(args):
     receptor=args.receptor
     ligand=args.ligand
     s = molgrid.ExampleProviderSettings(data_root=args.top_dir)
-    coord_reader = molgrid.CoordCache(molgrid.defaultGninaReceptorTyper,s) 
+    coord_reader = molgrid.CoordCache(molgrid.defaultGninaReceptorTyper,s)
+    
+    if args.verbose:
+        print('reading receptor')
+
     if len(receptor)==0:
         if input_json is None:
             raise ValueError('No receptor provided')
         receptor=input_json['receptor']
         receptor_string=receptor
-        receptor_file=open('receptor.pdb','w')
+        #an obscure name so we dont overwrite any files
+        receptor_file=open('ihopethisisnotafilename.pdb','w')
         receptor_file.write(receptor)
         receptor_file.close()
-        receptor_pybel=next(pybel.readfile("pdb", 'receptor.pdb'))
+        receptor_pybel=next(pybel.readfile("pdb", 'ihopethisisnotafilename.pdb'))
         receptor_rdmol=Chem.rdmolfiles.MolFromPDBBlock(receptor,sanitize=True)
-        receptor=coord_reader.make_coords('receptor.pdb')
-        os.remove('receptor.pdb')
+        receptor=coord_reader.make_coords('ihopethisisnotafilename.pdb')
+        os.remove('ihopethisisnotafilename.pdb')
     else:
         file_suffix=receptor.split('.')[-1]
         receptor_pybel=next(pybel.readfile(file_suffix, os.path.join(args.top_dir,receptor)))
         if file_suffix=='pdb':
-            receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=True)
-        elif file_suffix=='mol2':
-            receptor_rdmol=rdmolfiles.MolFromMol2File(os.path.join(args.top_dir,receptor),sanitize=True)
+            receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=False,proximityBonding=False)
+        elif file_suffix=='mol2':            
+            receptor_rdmol=rdmolfiles.MolFromMol2File(os.path.join(args.top_dir,receptor),sanitize=False,cleanupSubstructures=False)
         elif file_suffix=='mol':
-            receptor_rdmol=rdmolfiles.MolFromMolFile(os.path.join(args.top_dir,receptor),sanitize=True)
-        receptor_string=Chem.MolToPDBBlock(receptor_rdmol)
+            receptor_rdmol=rdmolfiles.MolFromMolFile(os.path.join(args.top_dir,receptor),sanitize=False,strictParsing=False)
+        receptor_string=receptor_pybel.write('pdb')
         receptor=coord_reader.make_coords(receptor)
+    
+    if args.verbose:
+        print('reading starter pharmacophore')
     
     if len(args.starter_json)>0:
         starter_json=extract_json(args.starter_json)
         starter_points_df=points_to_df(starter_json['points'])
         
-
-   
+    if args.verbose:
+        print('defining binding site')
+    
     if args.pharmnn_session is None:
         if len(ligand)>0:
-            ligand=coord_reader.make_coords(ligand) 
+            ligand=coord_reader.make_coords(ligand)
+            
         elif 'ligand' in input_json.keys():
             ligand_string=input_json['ligand']
-            ligand_file=open('ligand.pdb','w')
+            ligand_file=open('ihopethisisnotafilename_ligand.pdb','w')
             ligand_file.write(ligand_string)
             ligand_file.close()
-            ligand=coord_reader.make_coords('ligand.pdb')
-            os.remove('ligand.pdb')
-
+            ligand=coord_reader.make_coords('ihopethisisnotafilename_ligand.pdb')
+            os.remove('ihopethisisnotafilename_ligand.pdb')
         else:
             if args.x_center is None or args.y_center is None or args.z_center is None or args.x_size is None or args.y_size is None or args.z_size is None:
                 raise ValueError('No binding site provided')
@@ -328,7 +338,7 @@ def main(args):
             state=next_state
             state_loader=next_state_dataloader
         json_dict=pharm_env.state_to_json(state,label=model,min_features=args.min_features)
-        json.dump(json_dict,open('pharmnn_'+model.split('/')[1].split('.')[0]+'.json','w'))
+        json.dump(json_dict,open(args.output_prefix+'_'+model.split('/')[1].split('.')[0]+'.json','w'))
 
         
     

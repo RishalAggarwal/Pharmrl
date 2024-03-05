@@ -28,7 +28,6 @@ def parse_arguments():
     parser.add_argument('--tau', type=float, default=1)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--memory_size', type=int, default=1000)
-    parser.add_argument('--min_features', type=int, default=3)
     parser.add_argument('--target_update', type=int, default=1)
     parser.add_argument('--num_episodes', type=int, default=10000)
     parser.add_argument('--num_steps', type=int, default=10)
@@ -39,6 +38,7 @@ def parse_arguments():
     parser.add_argument('--beam_search', type=bool, default=False, help='beam search')
     parser.add_argument('--beam_size', type=int, default=3, help='beam size')
     parser.add_argument('--return_reward', type=str, default='dataframe', help='return reward')
+    parser.add_argument('--min_features', type=int, default=3, help='minimum number of features in generated pharmacophore graph')
     #environment parameters
     parser.add_argument('--top_dir', type=str, default='../Pharmnn/data')
     parser.add_argument('--train_file', type=str, default='../Pharmnn/data/train_pharmrl_dataset.txt')
