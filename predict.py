@@ -319,6 +319,8 @@ def main(args):
             for key in state_dict.keys():
                 if 'convs' in key:
                     key_list=key.split('.')
+                    key_sub_list=key_list[3].split('__')
+                    key_list[3]='___'.join(key_sub_list)
                     key_list[3]='<'+key_list[3]+'>'
                     new_key='.'.join(key_list)
                     new_state_dict[new_key]=state_dict[key]
