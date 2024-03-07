@@ -321,8 +321,7 @@ def main(args):
                     key_list[3]='<'+key_list[3]+'>'
                     new_key='.'.join(key_list)
                     state_dict[new_key]=state_dict[key]
-                    del state_dict[key]
-            policy_net.load_state_dict(state_dict)
+            policy_net.load_state_dict(state_dict,strict=True)
         policy_net.eval()
         state_loader=pharm_env.reset()
         state=None
