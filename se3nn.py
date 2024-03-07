@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_cluster import radius, radius_graph
 from torch_scatter import scatter
 from e3nn import o3
 from e3nn.nn import BatchNorm
