@@ -1,8 +1,6 @@
 import sys
 sys.path.append('./Pharmnn')
 from se3nn import Se3NN
-from rdkit import Chem
-from rdkit.Chem import rdmolfiles
 import torch
 import argparse
 import json
@@ -18,6 +16,8 @@ except ImportError:
     import openbabel as ob
 import molgrid
 from molgrid import CoordinateSet
+from rdkit import Chem
+from rdkit.Chem import rdmolfiles
 from environment import Inference_environment
 from Pharmnn.inference import infer
 from Pharmnn.pharm_rec import get_mol_pharm
