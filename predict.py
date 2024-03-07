@@ -314,14 +314,17 @@ def main(args):
         try:
             policy_net.load_state_dict(torch.load(model))
         except:
+            new_state_dict ={}
             state_dict = torch.load(model)
             for key in state_dict.keys():
                 if 'convs' in key:
                     key_list=key.split('.')
                     key_list[3]='<'+key_list[3]+'>'
                     new_key='.'.join(key_list)
-                    state_dict[new_key]=state_dict[key]
-            policy_net.load_state_dict(state_dict,strict=True)
+                    new_state_dict[new_key]=state_dict[key]
+                else:
+                    new_state_dict[key]=state_dict[key]
+            policy_net.load_state_dict(new_state_dict)
         policy_net.eval()
         state_loader=pharm_env.reset()
         state=None
