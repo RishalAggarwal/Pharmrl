@@ -233,3 +233,6 @@ class graphdataset(Dataset):
     
     def pop(self,idx):
         self.datapoints.pop(idx)
+    
+    def len(self) -> int:
+        return len(self.datapoints)
