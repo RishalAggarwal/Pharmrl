@@ -26,7 +26,7 @@ from se3nn import Se3NN
 import os
 import pickle as pkl
 import json
-
+import re
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -311,7 +311,18 @@ def main(args):
 
     for model in ['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']:
         policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
-        policy_net.load_state_dict(torch.load(model))
+        try:
+            policy_net.load_state_dict(torch.load(model))
+        except:
+            state_dict = torch.load(model)
+            for key in state_dict.keys():
+                if 'convs' in key:
+                    key_list=key.split('.')
+                    key_list[3]='<'+key_list[3]+'>'
+                    new_key='.'.join(key_list)
+                    state_dict[new_key]=state_dict[key]
+                    del state_dict[key]
+            policy_net.load_state_dict(state_dict)
         policy_net.eval()
         state_loader=pharm_env.reset()
         state=None
