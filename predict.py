@@ -1,28 +1,13 @@
 import sys
 sys.path.append('./Pharmnn')
-from collections import namedtuple, deque
-from itertools import count
-from environment import pharm_env
-from environment import ReplayMemory
 from se3nn import Se3NN
-import numpy as np
-import math
-import random
-import rdkit
 from rdkit import Chem
 from rdkit.Chem import rdmolfiles
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch_geometric.data import Batch
-import wandb
-from copy import copy, deepcopy
 import argparse
 import json
 import pandas as pd
-import Pharmnn
-from Pharmnn.dataset import MyCoordinateSet,Inference_Dataset
+from Pharmnn.dataset import Inference_Dataset
 try:
     from molgrid.openbabel import pybel
 except ImportError:
