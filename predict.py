@@ -311,13 +311,7 @@ def main(args):
 
     for model in ['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']:
         policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
-        try:
-            policy_net.load_state_dict(torch.load(model))
-        except:
-            #compatible with newer version of pytorch
-            state_dict=torch.load(model)
-            for key in policy_net.state_dict.keys():
-                policy_net.state_dict[key]=state_dict.pop(key.replace('<','').replace('>',''))
+        policy_net.load_state_dict(torch.load(model))
         policy_net.eval()
         state_loader=pharm_env.reset()
         state=None
