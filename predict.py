@@ -354,7 +354,7 @@ def main(args):
             next_state_dataloader,done=pharm_env.step(next_state,steps_done)
             state=next_state
             state_loader=next_state_dataloader
-        json_dict=pharm_env.state_to_json(state,label=model,min_features=args.min_features)
+        json_dict=pharm_env.state_to_json(state,label=model,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
         json.dump(json_dict,open(args.output_prefix+'_'+model.split('/')[1].split('.')[0]+'.json','w'))
 
         
