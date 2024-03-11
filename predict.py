@@ -44,7 +44,7 @@ def parse_arguments():
     parser.add_argument('--z_size', type=float, default=None)
     parser.add_argument('--input_json', type=str, default='')
     parser.add_argument('--starter_json', type=str, default='',help='starter pharmacophore points')
-    parser.add_argument('--combine', action='store_true',default=False,  help='combine provided and predicted pharmacophore points')
+    parser.add_argument('--features', default='combine', choices=['combine','cnn_only','ligand_only'], help='The type of pharmacophore features to use')
     parser.add_argument('--cnn_only', action='store_true',default=False,  help='use only predicted pharmacophore points')
     parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
     parser.add_argument('--pharmnn_session', type=str, default=None,help='reload previous pharmnn features and points')
@@ -154,6 +154,8 @@ def pharm_rec_df(rdmol,obmol):
     return df
 
 def points_to_df(points):
+    if len(points)==0:
+        return None
     points_df=pd.DataFrame(points)
     points_df=points_df[points_df['enabled']==True]
     #take only name,x,y,z columns
@@ -173,7 +175,6 @@ def main(args):
     points_df=None
     if len(args.input_json)>0:
         input_json=extract_json(args.input_json)
-        points_df=points_to_df(input_json['points'])
     else:
         input_json=None
     receptor=args.receptor
@@ -256,10 +257,10 @@ def main(args):
                 ligand=coord_reader.make_coords('ligand.pdb')
                 os.remove('ligand.pdb')
         
-        dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
+        dataset=Inference_Dataset(receptor,ligand,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
         
         #get the pharmacophore points
-        if input_json is None or args.combine or args.cnn_only:
+        if 'combine' in args.features or 'cnn_only' in args.features:
             if args.verbose:
                 print('predicting pharmacophore feature points')
             
@@ -270,10 +271,26 @@ def main(args):
             predicted_feature_points_df=dict_to_df(predicted_feature_points)
             dataset.add_points(predicted_feature_points_df)
         
-        if (args.ligand_only or args.combine) and input_json is not None:
+        
+        if 'combine' in args.features or 'ligand_only' in args.features:
+            #TODO derive pharmacophore points from input ligand and receptor here into "points_df"
+            if 'ligand_only' in args.features:
+                if points_df is None: 
+                    if input_json is None:
+                        raise ValueError('No ligand pharmacophore feature detected')
+                    points_df=points_to_df(input_json['points'])
+                    if points_df is None:
+                        raise ValueError('No ligand pharmacophore feature provided or detected')
+                else:
+                    dataset.add_points(points_df)
+                    points_df=points_to_df(input_json['points'])
             if args.verbose:
                 print('adding provided pharmacophore feature points')
             dataset.add_points(points_df)
+
+        if dataset.points is None or len(dataset.points)<3:
+            raise ValueError('Not enough pharmacophore points to form a pharmacophore')
+            
 
         if args.verbose:
             print('getting cnn hidden features')
