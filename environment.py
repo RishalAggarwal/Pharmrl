@@ -329,6 +329,8 @@ class Inference_environment():
         pharmit_points["extolerance"] = 1
         pharmit_points["recname"] = 'receptor.pdb'
         pharmit_points["receptor"] = self.receptor_string
+        if label is not None:
+            pharmit_points["label"]=label
         for node in pharm_index:
             coord=self.feature_points[node,1:4]
             features=self.feature_points[node,0]
