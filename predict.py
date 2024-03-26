@@ -19,7 +19,7 @@ from molgrid import CoordinateSet
 from rdkit import Chem
 from rdkit.Chem import rdmolfiles
 from environment import Inference_environment
-from Pharmnn.inference import infer
+from Pharmnn.inference import infer, matching_distance, matching_category
 from Pharmnn.pharm_rec import get_mol_pharm
 from qlearning import select_action
 from se3nn import Se3NN
@@ -222,13 +222,17 @@ def main(args):
     
     if args.pharmnn_session is None:
         if len(ligand)>0:
+            ligand_suffix=ligand.split('.')[-1]
+            ligand_pybel=next(pybel.readfile(ligand_suffix, ligand))
             ligand=coord_reader.make_coords(ligand)
             
         elif 'ligand' in input_json.keys():
+            ## TODO assumes ligand is in pdb format, could be any format, make it more general
             ligand_string=input_json['ligand']
             ligand_file=open('ihopethisisnotafilename_ligand.pdb','w')
             ligand_file.write(ligand_string)
             ligand_file.close()
+            ligand_pybel=next(pybel.readfile("pdb", 'ihopethisisnotafilename_ligand.pdb'))
             ligand=coord_reader.make_coords('ihopethisisnotafilename_ligand.pdb')
             os.remove('ihopethisisnotafilename_ligand.pdb')
         else:
@@ -241,39 +245,44 @@ def main(args):
                 y_max=args.y_center+args.y_size/2
                 z_min=args.z_center-args.z_size/2
                 z_max=args.z_center+args.z_size/2
-                ligand=ob.OBMol()
-                ligand=pybel.Molecule(ligand)
+                ligand_obmol=ob.OBMol()
+                ligand_pybel=pybel.Molecule(ligand_obmol)
                 atom_1 = ob.OBAtom()
                 atom_1.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
                 atom_1.SetVector(x_min, y_min, z_min)  # Set 3D coordinates (x, y, z)
                 atom_2 = ob.OBAtom()
                 atom_2.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
                 atom_2.SetVector(x_max, y_max, z_max)  # Set 3D coordinates (x, y, z)
-                ligand.OBMol.AddAtom(atom_1)
-                ligand.OBMol.AddAtom(atom_2)
+                ligand_pybel.OBMol.AddAtom(atom_1)
+                ligand_pybel.OBMol.AddAtom(atom_2)
                 setattr(args,'autobox_extend',0)
                 #TODO output ligand.pdb and read into coordinateset
-                ligand.write('pdb','ligand.pdb',overwrite=True)
-                ligand=coord_reader.make_coords('ligand.pdb')
-                os.remove('ligand.pdb')
+                ligand.write('pdb','ihopethisisnotafilename_ligand.pdb',overwrite=True)
+                ligand=coord_reader.make_coords('ihopethisisnotafilename_ligand.pdb')
+                os.remove('ihopethisisnotafilename_ligand.pdb')
         
         dataset=Inference_Dataset(receptor,ligand,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
         
+        pharm_rec_features=pharm_rec_df(receptor_rdmol,receptor_pybel)
+
         #get the pharmacophore points
         if 'combine' in args.features or 'cnn_only' in args.features:
             if args.verbose:
                 print('predicting pharmacophore feature points')
             
             args_cnn_inference=cnn_inference_arguments(args)
-            pharm_rec_features=pharm_rec_df(receptor_rdmol,receptor_pybel)
             returned_lists=infer(args_cnn_inference,dataset,pharm_rec_features)
             predicted_feature_points=returned_lists[0][0][0]
             predicted_feature_points_df=dict_to_df(predicted_feature_points)
             dataset.add_points(predicted_feature_points_df)
         
-        
+        ##TODO redo this if-else scheme
         if 'combine' in args.features or 'ligand_only' in args.features:
             #TODO derive pharmacophore points from input ligand and receptor here into "points_df"
+            obConversion = ob.OBConversion()
+            obConversion.SetInAndOutFormats("smi", "mol")
+            ligand_rdmol=Chem.rdmolfiles.MolFromMolBlock(obConversion.WriteString(ligand_pybel.OBMol))
+            pharm_lig_features=get_mol_pharm(ligand_rdmol,ligand_pybel,protein=False)
             if 'ligand_only' in args.features:
                 if points_df is None: 
                     if input_json is None:
@@ -326,7 +335,11 @@ def main(args):
     #predict the pharmacophores
     pharm_env=Inference_environment(receptor,receptor_string,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
 
-    for model in ['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']:
+    if 'ligand_only' in args.features:
+        models=['models/sweep_model.pt','models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+    else:
+        models=['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+    for model in models:
         policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
         try:
             policy_net.load_state_dict(torch.load(model))

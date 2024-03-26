@@ -103,6 +103,7 @@ class pharm_env():
             #only randomize training systems
             if randomize and len(self.systems_list)==1:
                 np.random.shuffle(self.systems_list[0])
+        self.systems_list[1]=sorted(self.systems_list[1])
         self.train_system_index=-1
         self.test_system_index=-1
         self.system_dir=None
