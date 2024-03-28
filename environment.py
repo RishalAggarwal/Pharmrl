@@ -103,6 +103,7 @@ class pharm_env():
             #only randomize training systems
             if randomize and len(self.systems_list)==1:
                 np.random.shuffle(self.systems_list[0])
+        self.systems_list[1]=sorted(self.systems_list[1])
         self.train_system_index=-1
         self.test_system_index=-1
         self.system_dir=None
@@ -271,11 +272,12 @@ def convert_to_list(string):
 
 class Inference_environment():
 
-    def __init__(self,receptor,receptor_string,feature_points,cnn_hidden_features,batch_size,top_dir,pharm_pharm_radius=6,protein_pharm_radius=7,max_steps=10,parallel=False,pool_processes=1):
+    def __init__(self,receptor,receptor_string,receptor_file_name,feature_points,cnn_hidden_features,batch_size,top_dir,pharm_pharm_radius=6,protein_pharm_radius=7,max_steps=10,parallel=False,pool_processes=1):
         self.receptor=receptor
         self.receptor_string=receptor_string
+        self.receptor_file_name=receptor_file_name
         self.feature_points=feature_points
-        self.starter_points=feature_points[:,-1]
+        self.starter_points=feature_points[:,4]
         self.cnn_hidden_features=cnn_hidden_features.detach().cpu().numpy()
         self.current_step=0
         self.max_steps=max_steps
@@ -329,17 +331,26 @@ class Inference_environment():
         pharmit_points["extolerance"] = 1
         pharmit_points["recname"] = 'receptor.pdb'
         pharmit_points["receptor"] = self.receptor_string
+        pharmit_points["recname"]=self.receptor_file_name
         for node in pharm_index:
             coord=self.feature_points[node,1:4]
             features=self.feature_points[node,0]
+            vector=self.feature_points[node,-2]
+            svector=self.feature_points[node,-1]
             for feature in features.split(':'):
                 radius=1
                 if 'Hydrogen' in feature:
                     radius=1
-                if label is not None:
-                    point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"label": label}
+                if vector is not None and (isinstance(vector, list) or isinstance(vector, dict)):
+                    if label is not None:
+                        point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"vector":vector,"svector":svector,"label": label}
+                    else:
+                        point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"vector":vector,"svector":svector}      
                 else:
-                    point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2]}
+                    if label is not None:
+                        point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"label": label}
+                    else:
+                        point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2]}
                 pharmit_points["points"].append(point_dict)
         return pharmit_points
 

@@ -44,7 +44,7 @@ def parse_arguments():
     parser.add_argument('--z_size', type=float, default=None)
     parser.add_argument('--input_json', type=str, default='')
     parser.add_argument('--starter_json', type=str, default='',help='starter pharmacophore points')
-    parser.add_argument('--combine', action='store_true',default=False,  help='combine provided and predicted pharmacophore points')
+    parser.add_argument('--features', default='combine', choices=['combine','cnn_only','ligand_only'], help='The type of pharmacophore features to use')
     parser.add_argument('--cnn_only', action='store_true',default=False,  help='use only predicted pharmacophore points')
     parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
     parser.add_argument('--pharmnn_session', type=str, default=None,help='reload previous pharmnn features and points')
@@ -126,25 +126,38 @@ def extract_json(json_file):
         data = json.load(f)
     return data
 
-def dict_to_df(dict):
+def dict_to_df(dict,vector=False):
     features=[]
     x_values=[]
     y_values=[]
     z_values=[]
+    vector_values=[]
+    svector_values=[]
     for key, positions in dict.items():
         for position in positions:
             features.append(key)
             x_values.append(position[0])
             y_values.append(position[1])
             z_values.append(position[2])
-
+            vector_values.append(None)
+            svector_values.append(None)
     # Create a Pandas DataFrame
-    df = pd.DataFrame({
-        'Feature': features,
-        'x': x_values,
-        'y': y_values,
-        'z': z_values
-    })
+    if vector:
+        df = pd.DataFrame({
+            'Feature': features,
+            'x': x_values,
+            'y': y_values,
+            'z': z_values,
+            'vector': vector_values,
+            'svector': svector_values
+        })
+    else:
+        df = pd.DataFrame({
+            'Feature': features,
+            'x': x_values,
+            'y': y_values,
+            'z': z_values
+        })
     return df
 
 
@@ -154,10 +167,16 @@ def pharm_rec_df(rdmol,obmol):
     return df
 
 def points_to_df(points):
+    if len(points)==0:
+        return None
     points_df=pd.DataFrame(points)
     points_df=points_df[points_df['enabled']==True]
-    #take only name,x,y,z columns
-    points_df=points_df[['name','x','y','z']]
+    if not 'vector' in points_df.columns:
+        points_df['vector']=None
+    if not 'svector' in points_df.columns:
+        points_df['svector']=None
+    #take only name,x,y,z and vector and svector columns
+    points_df=points_df[['name','x','y','z','vector','svector']]
     #rename name column as Feature
     points_df=points_df.rename(columns={'name':'Feature'})
     #drop comlumns where Feature is InclusionSphere
@@ -166,6 +185,20 @@ def points_to_df(points):
     points_df=points_df.reset_index(drop=True)
     return points_df
 
+def get_rdmol_obmol(file):
+    file_suffix=file.split('.')[-1]
+    if file_suffix=='pdb':
+        rdmol=rdmolfiles.MolFromPDBFile(file,sanitize=False,proximityBonding=False)
+    elif file_suffix=='mol2':
+        rdmol=rdmolfiles.MolFromMol2File(file,sanitize=False,cleanupSubstructures=False)
+    elif file_suffix=='mol':
+        rdmol=rdmolfiles.MolFromMolFile(file,sanitize=False,strictParsing=False)
+    elif file_suffix=='sdf':
+        rdmol=rdmolfiles.SDMolSupplier(file,sanitize=False,strictParsing=False)
+        rdmol=rdmol[0]
+    obmol =next(pybel.readfile(file_suffix, file))
+    return rdmol,obmol
+
 def main(args):
 
     #TODO starter pharmacophore points
@@ -173,41 +206,40 @@ def main(args):
     points_df=None
     if len(args.input_json)>0:
         input_json=extract_json(args.input_json)
-        points_df=points_to_df(input_json['points'])
     else:
         input_json=None
     receptor=args.receptor
     ligand=args.ligand
     s = molgrid.ExampleProviderSettings(data_root=args.top_dir)
     coord_reader = molgrid.CoordCache(molgrid.defaultGninaReceptorTyper,s)
+    receptor_file_generated=False
+    ligand_file_generated=False
+    json_file_generated=False
     
     if args.verbose:
         print('reading receptor')
 
     if len(receptor)==0:
+        ## TODO assumes receptor is in pdb format, could be any format, make it more general
         if input_json is None:
             raise ValueError('No receptor provided')
-        receptor=input_json['receptor']
-        receptor_string=receptor
+        receptor_string=input_json['receptor']
+        receptor_file_name=input_json['recname']
+        receptor_file_suffix=receptor_file_name.split('.')[-1]
         #an obscure name so we dont overwrite any files
-        receptor_file=open('ihopethisisnotafilename.pdb','w')
-        receptor_file.write(receptor)
+        receptor_file=open('ihopethisisnotafilename.'+receptor_file_suffix,'w')
+        receptor_file.write(receptor_string)
         receptor_file.close()
-        receptor_pybel=next(pybel.readfile("pdb", 'ihopethisisnotafilename.pdb'))
-        receptor_rdmol=Chem.rdmolfiles.MolFromPDBBlock(receptor,sanitize=True)
-        receptor=coord_reader.make_coords('ihopethisisnotafilename.pdb')
-        os.remove('ihopethisisnotafilename.pdb')
+        receptor_file_generated=True
+        receptor_rdmol,receptor_pybel=get_rdmol_obmol('ihopethisisnotafilename.'+receptor_file_suffix)
+        receptor=coord_reader.make_coords('ihopethisisnotafilename.'+receptor_file_suffix)
+        receptor_file_name='ihopethisisnotafilename.'+receptor_file_suffix
+        
     else:
-        file_suffix=receptor.split('.')[-1]
-        receptor_pybel=next(pybel.readfile(file_suffix, os.path.join(args.top_dir,receptor)))
-        if file_suffix=='pdb':
-            receptor_rdmol=rdmolfiles.MolFromPDBFile(os.path.join(args.top_dir,receptor),sanitize=False,proximityBonding=False)
-        elif file_suffix=='mol2':            
-            receptor_rdmol=rdmolfiles.MolFromMol2File(os.path.join(args.top_dir,receptor),sanitize=False,cleanupSubstructures=False)
-        elif file_suffix=='mol':
-            receptor_rdmol=rdmolfiles.MolFromMolFile(os.path.join(args.top_dir,receptor),sanitize=False,strictParsing=False)
-        receptor_string=receptor_pybel.write('pdb')
-        receptor=coord_reader.make_coords(receptor)
+        receptor_file_name=args.receptor
+        receptor_rdmol,receptor_pybel=get_rdmol_obmol(receptor_file_name)
+        receptor_string=open(receptor_file_name).read()
+        receptor=coord_reader.make_coords(receptor_file_name)
     
     if args.verbose:
         print('reading starter pharmacophore')
@@ -220,16 +252,22 @@ def main(args):
         print('defining binding site')
     
     if args.pharmnn_session is None:
-        if len(ligand)>0:
-            ligand=coord_reader.make_coords(ligand)
-            
+        if len(args.ligand)>0:
+            ligand_file_name=args.ligand
+            ligand_rdmol,ligand_pybel=get_rdmol_obmol(ligand_file_name)
+            ligand=coord_reader.make_coords(ligand_file_name)
         elif 'ligand' in input_json.keys():
             ligand_string=input_json['ligand']
-            ligand_file=open('ihopethisisnotafilename_ligand.pdb','w')
+            ligand_file_name=input_json['ligandFormat']
+            ligand_file_suffix=ligand_file_name.split('.')[-1]
+            #an obscure name so we dont overwrite any files
+            ligand_file=open('ihopethisisnotafilename_ligand.'+ligand_file_suffix,'w')
             ligand_file.write(ligand_string)
             ligand_file.close()
-            ligand=coord_reader.make_coords('ihopethisisnotafilename_ligand.pdb')
-            os.remove('ihopethisisnotafilename_ligand.pdb')
+            ligand_file_generated=True
+            ligand_file_name='ihopethisisnotafilename_ligand.'+ligand_file_suffix
+            ligand_rdmol,ligand_pybel=get_rdmol_obmol(ligand_file_name)
+            ligand=coord_reader.make_coords(ligand_file_name)
         else:
             if args.x_center is None or args.y_center is None or args.z_center is None or args.x_size is None or args.y_size is None or args.z_size is None:
                 raise ValueError('No binding site provided')
@@ -240,40 +278,66 @@ def main(args):
                 y_max=args.y_center+args.y_size/2
                 z_min=args.z_center-args.z_size/2
                 z_max=args.z_center+args.z_size/2
-                ligand=ob.OBMol()
-                ligand=pybel.Molecule(ligand)
+                ligand_obmol=ob.OBMol()
+                ligand_pybel=pybel.Molecule(ligand_obmol)
                 atom_1 = ob.OBAtom()
-                atom_1.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
+                atom_1.SetAtomicNum(1)  # Set the atomic number (e.g., carbon)
                 atom_1.SetVector(x_min, y_min, z_min)  # Set 3D coordinates (x, y, z)
                 atom_2 = ob.OBAtom()
-                atom_2.SetAtomicNum(6)  # Set the atomic number (e.g., carbon)
+                atom_2.SetAtomicNum(1)  # Set the atomic number (e.g., carbon)
                 atom_2.SetVector(x_max, y_max, z_max)  # Set 3D coordinates (x, y, z)
-                ligand.OBMol.AddAtom(atom_1)
-                ligand.OBMol.AddAtom(atom_2)
+                ligand_pybel.OBMol.AddAtom(atom_1)
+                ligand_pybel.OBMol.AddAtom(atom_2)
                 setattr(args,'autobox_extend',0)
-                #TODO output ligand.pdb and read into coordinateset
-                ligand.write('pdb','ligand.pdb',overwrite=True)
-                ligand=coord_reader.make_coords('ligand.pdb')
-                os.remove('ligand.pdb')
+                ligand_file_name='ihopethisisnotafilename_ligand.pdb'
+                ligand_pybel.write('pdb',ligand_file_name,overwrite=True)
+                ligand=coord_reader.make_coords(ligand_file_name)
+                
         
-        dataset=Inference_Dataset(receptor,ligand,points_df,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
+        dataset=Inference_Dataset(receptor,ligand,auto_box_extend=args.autobox_extend,grid_dimension=args.grid_dimension,rotate=args.rotate,starter_df=starter_points_df)
         
+        pharm_rec_features=pharm_rec_df(receptor_rdmol,receptor_pybel)
+
         #get the pharmacophore points
-        if input_json is None or args.combine or args.cnn_only:
+
+        if 'combine' in args.features or 'ligand_only' in args.features:
+            if len(args.ligand)>0:
+                if not os.path.isfile('pharmit'):
+                    os.system('wget https://github.com/dkoes/pharmit/releases/download/v1.0/pharmit')
+                    os.system('chmod +x pharmit')
+                os.system(f'./pharmit pharma -receptor {receptor_file_name} -in {ligand_file_name} -out ihopethisisnotafile.json')
+                ligand_points_df=points_to_df(extract_json('ihopethisisnotafile.json')['points'])
+                json_file_generated=True
+                dataset.add_points(ligand_points_df)
+            else:
+                if input_json is not None:
+                    ligand_points_df=points_to_df(input_json['points'])
+                    if ligand_points_df is not None:
+                        dataset.add_points(ligand_points_df)
+                    else:
+                        raise ValueError('No ligand pharmacophore feature provided or detected')
+                
+                else:
+                    raise ValueError('No ligand pharmacophore feature provided or detected')
+
+
+        if 'combine' in args.features or 'cnn_only' in args.features:
             if args.verbose:
                 print('predicting pharmacophore feature points')
             
             args_cnn_inference=cnn_inference_arguments(args)
-            pharm_rec_features=pharm_rec_df(receptor_rdmol,receptor_pybel)
             returned_lists=infer(args_cnn_inference,dataset,pharm_rec_features)
             predicted_feature_points=returned_lists[0][0][0]
-            predicted_feature_points_df=dict_to_df(predicted_feature_points)
+            predicted_feature_points_df=dict_to_df(predicted_feature_points,vector=True)
             dataset.add_points(predicted_feature_points_df)
         
-        if (args.ligand_only or args.combine) and input_json is not None:
-            if args.verbose:
-                print('adding provided pharmacophore feature points')
-            dataset.add_points(points_df)
+        if args.verbose:
+            print('added pharmacophore points to dataset')
+        
+        #check if there are enough points to form a pharmacophore
+        if dataset.points is None or len(dataset.points)<3:
+            raise ValueError('Not enough pharmacophore points to form a pharmacophore')
+            
 
         if args.verbose:
             print('getting cnn hidden features')
@@ -292,8 +356,7 @@ def main(args):
                     cnn_hidden_features=torch.cat((cnn_hidden_features,hidden_features),0)
         
         assert cnn_hidden_features.shape[0]==dataset.__len__()
-        
-        
+
         feature_points=dataset.get_points()
         if args.dump_pharmnn is not None:
             pkl.dump([feature_points,cnn_hidden_features],open(args.dump_pharmnn,'wb'))
@@ -307,9 +370,13 @@ def main(args):
     if args.verbose:
         print('predicting pharmacophores')
     #predict the pharmacophores
-    pharm_env=Inference_environment(receptor,receptor_string,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
+    pharm_env=Inference_environment(receptor,receptor_string,receptor_file_name,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
 
-    for model in ['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']:
+    if 'ligand_only' in args.features:
+        models=['models/sweep_model.pt','models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+    else:
+        models=['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+    for model in models:
         policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
         try:
             policy_net.load_state_dict(torch.load(model))
@@ -337,13 +404,18 @@ def main(args):
             next_state_dataloader,done=pharm_env.step(next_state,steps_done)
             state=next_state
             state_loader=next_state_dataloader
-        json_dict=pharm_env.state_to_json(state,label=model,min_features=args.min_features)
+        json_dict=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
         json.dump(json_dict,open(args.output_prefix+'_'+model.split('/')[1].split('.')[0]+'.json','w'))
-
-        
-    
+    #TODO remove generated files        
+    if receptor_file_generated:
+        os.remove(receptor_file_name)
+    if ligand_file_generated:
+        os.remove(ligand_file_name)
+    if json_file_generated:
+        os.remove('ihopethisisnotafile.json')
 
 if __name__ == '__main__':
+
     args=parse_arguments()
     main(args)
 
