@@ -376,9 +376,9 @@ def main(args):
     pharm_env=Inference_environment(receptor,receptor_string,receptor_file_name,ligand_string,ligand_file_name_env,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
 
     if 'ligand_only' in args.features:
-        models=['models/sweep_model.pt','models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+        models=['models/model_ligand.pt','models/model_cnn_1.pt','models/model_cnn_2.pt','models/model_cnn_3.pt','models/model_cnn_4.pt','models/model_cnn_5.pt']
     else:
-        models=['models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']
+        models=['models/model_cnn_1.pt','models/model_cnn_2.pt','models/model_cnn_3.pt','models/model_cnn_4.pt','models/model_cnn_5.pt']
     for model in models:
         policy_net = Se3NN(in_pharm_node_features=args.in_pharm_node_features, in_prot_node_features=args.in_prot_node_features, sh_lmax=args.sh_lmax, ns=args.ns, nv=args.nv, num_conv_layers=args.num_conv_layers, max_radius=args.max_radius, radius_embed_dim=args.radius_embed_dim, batch_norm=args.batch_norm, residual=args.residual).to(device)
         try:
@@ -409,7 +409,7 @@ def main(args):
             state_loader=next_state_dataloader
         try: #if json_dict already exists
             json_dict_new=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
-            json_dict["points"].append(json_dict_new["points"])
+            json_dict["points"].extend(json_dict_new["points"])
         except:
             json_dict=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
         json.dump(json_dict,open(args.output_prefix+'_predicted_pharmacophores.json','w'))   
