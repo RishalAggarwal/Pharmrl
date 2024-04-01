@@ -43,10 +43,8 @@ def parse_arguments():
     parser.add_argument('--y_size', type=float, default=None)
     parser.add_argument('--z_size', type=float, default=None)
     parser.add_argument('--input_json', type=str, default='')
-    parser.add_argument('--starter_json', type=str, default='',help='starter pharmacophore points')
+    parser.add_argument('--starter_json', type=str, default='None',help='starter pharmacophore points')
     parser.add_argument('--features', default='combine', choices=['combine','cnn_only','ligand_only'], help='The type of pharmacophore features to use')
-    parser.add_argument('--cnn_only', action='store_true',default=False,  help='use only predicted pharmacophore points')
-    parser.add_argument('--ligand_only', action='store_true',default=False,  help='use only provided pharmacophore points')
     parser.add_argument('--pharmnn_session', type=str, default=None,help='reload previous pharmnn features and points')
     parser.add_argument('--dump_pharmnn', type=str, default=None,help='pharmnn dump file name')
     parser.add_argument('--output_prefix', type=str, default='pharmnn',help='prefix for output json session files')
@@ -215,6 +213,8 @@ def main(args):
     receptor_file_generated=False
     ligand_file_generated=False
     json_file_generated=False
+    ligand_string=None
+    ligand_file_name_env=None
     
     if args.verbose:
         print('reading receptor')
@@ -244,17 +244,22 @@ def main(args):
     if args.verbose:
         print('reading starter pharmacophore')
     
-    if len(args.starter_json)>0:
+    if args.starter_json!='None':
         starter_json=extract_json(args.starter_json)
         starter_points_df=points_to_df(starter_json['points'])
         
     if args.verbose:
         print('defining binding site')
+
     
+    #TODO Fpocket feature
     if args.pharmnn_session is None:
         if len(args.ligand)>0:
             ligand_file_name=args.ligand
-            ligand_rdmol,ligand_pybel=get_rdmol_obmol(ligand_file_name)
+            ligand_string=open(ligand_file_name).read()
+            ligand_file_name_env=ligand_file_name
+            ligand_file_suffix=ligand_file_name.split('.')[-1]
+            ligand_pybel=next(pybel.readfile(ligand_file_suffix, ligand_file_name))
             ligand=coord_reader.make_coords(ligand_file_name)
         elif 'ligand' in input_json.keys():
             ligand_string=input_json['ligand']
@@ -265,8 +270,9 @@ def main(args):
             ligand_file.write(ligand_string)
             ligand_file.close()
             ligand_file_generated=True
-            ligand_file_name='ihopethisisnotafilename_ligand.'+ligand_file_suffix
-            ligand_rdmol,ligand_pybel=get_rdmol_obmol(ligand_file_name)
+            ligand_file_name=ligand_file_name_env='ihopethisisnotafilename_ligand.'+ligand_file_suffix
+            ligand_file_suffix=ligand_file_name.split('.')[-1]
+            ligand_pybel=next(pybel.readfile(ligand_file_suffix, ligand_file_name))
             ligand=coord_reader.make_coords(ligand_file_name)
         else:
             if args.x_center is None or args.y_center is None or args.z_center is None or args.x_size is None or args.y_size is None or args.z_size is None:
@@ -370,7 +376,7 @@ def main(args):
     if args.verbose:
         print('predicting pharmacophores')
     #predict the pharmacophores
-    pharm_env=Inference_environment(receptor,receptor_string,receptor_file_name,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
+    pharm_env=Inference_environment(receptor,receptor_string,receptor_file_name,ligand_string,ligand_file_name_env,feature_points,cnn_hidden_features,args.batch_size,args.top_dir,args.pharm_pharm_radius,args.protein_pharm_radius,args.max_size,args.parallel,args.pool_processes)
 
     if 'ligand_only' in args.features:
         models=['models/sweep_model.pt','models/model_all_points_1.pt','models/model_all_points_2.pt','models/model_all_points_3.pt','models/model_all_points_4.pt','models/model_all_points_5.pt']

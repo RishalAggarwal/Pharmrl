@@ -272,10 +272,12 @@ def convert_to_list(string):
 
 class Inference_environment():
 
-    def __init__(self,receptor,receptor_string,receptor_file_name,feature_points,cnn_hidden_features,batch_size,top_dir,pharm_pharm_radius=6,protein_pharm_radius=7,max_steps=10,parallel=False,pool_processes=1):
+    def __init__(self,receptor,receptor_string,receptor_file_name,ligand_string,ligand_file_name,feature_points,cnn_hidden_features,batch_size,top_dir,pharm_pharm_radius=6,protein_pharm_radius=7,max_steps=10,parallel=False,pool_processes=1):
         self.receptor=receptor
         self.receptor_string=receptor_string
         self.receptor_file_name=receptor_file_name
+        self.ligand_string=ligand_string
+        self.ligand_format=ligand_file_name
         self.feature_points=feature_points
         self.starter_points=feature_points[:,4]
         self.cnn_hidden_features=cnn_hidden_features.detach().cpu().numpy()
@@ -332,6 +334,9 @@ class Inference_environment():
         pharmit_points["recname"] = 'receptor.pdb'
         pharmit_points["receptor"] = self.receptor_string
         pharmit_points["recname"]=self.receptor_file_name
+        if self.ligand_string is not None:
+            pharmit_points["ligand"]=self.ligand_string
+            pharmit_points["ligandFormat"]=self.ligand_format
         for node in pharm_index:
             coord=self.feature_points[node,1:4]
             features=self.feature_points[node,0]
