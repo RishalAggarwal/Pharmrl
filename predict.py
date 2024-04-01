@@ -199,7 +199,6 @@ def get_rdmol_obmol(file):
 
 def main(args):
 
-    #TODO starter pharmacophore points
     starter_points_df=None
     points_df=None
     if len(args.input_json)>0:
@@ -220,7 +219,6 @@ def main(args):
         print('reading receptor')
 
     if len(receptor)==0:
-        ## TODO assumes receptor is in pdb format, could be any format, make it more general
         if input_json is None:
             raise ValueError('No receptor provided')
         receptor_string=input_json['receptor']
@@ -252,7 +250,6 @@ def main(args):
         print('defining binding site')
 
     
-    #TODO Fpocket feature
     if args.pharmnn_session is None:
         if len(args.ligand)>0:
             ligand_file_name=args.ligand
@@ -410,9 +407,12 @@ def main(args):
             next_state_dataloader,done=pharm_env.step(next_state,steps_done)
             state=next_state
             state_loader=next_state_dataloader
-        json_dict=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
-        json.dump(json_dict,open(args.output_prefix+'_'+model.split('/')[1].split('.')[0]+'.json','w'))
-    #TODO remove generated files        
+        try: #if json_dict already exists
+            json_dict_new=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
+            json_dict["points"].append(json_dict_new["points"])
+        except:
+            json_dict=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
+        json.dump(json_dict,open(args.output_prefix+'_predicted_pharmacophores.json','w'))   
     if receptor_file_generated:
         os.remove(receptor_file_name)
     if ligand_file_generated:
