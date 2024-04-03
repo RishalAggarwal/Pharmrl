@@ -13,6 +13,7 @@ except ImportError:
 try:
     from molgrid.openbabel import pybel
 except ImportError:
+    from openbabel import openbabel
     from openbabel import pybel
 import molgrid
 from molgrid import CoordinateSet
