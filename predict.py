@@ -27,7 +27,6 @@ from se3nn import Se3NN
 import os
 import pickle as pkl
 import json
-import re
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -307,7 +306,7 @@ def main(args):
         if 'combine' in args.features or 'ligand_only' in args.features:
             if len(args.ligand)>0:
                 if not os.path.isfile('pharmit'):
-                    os.system('wget https://github.com/dkoes/pharmit/releases/download/v1.0/pharmit')
+                    os.system('wget --no-check-certificate https://github.com/dkoes/pharmit/releases/download/v1.0/pharmit')
                     os.system('chmod +x pharmit')
                 os.system(f'./pharmit pharma -receptor {receptor_file_name} -in {ligand_file_name} -out ihopethisisnotafile.json')
                 ligand_points_df=points_to_df(extract_json('ihopethisisnotafile.json')['points'])
