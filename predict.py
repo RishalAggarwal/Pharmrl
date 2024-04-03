@@ -7,13 +7,13 @@ import json
 import pandas as pd
 from Pharmnn.dataset import Inference_Dataset
 try:
-    from molgrid.openbabel import pybel
-except ImportError:
-    from openbabel import pybel
-try:
     import molgrid.openbabel as ob
 except ImportError:
     import openbabel as ob
+try:
+    from molgrid.openbabel import pybel
+except ImportError:
+    from openbabel import pybel
 import molgrid
 from molgrid import CoordinateSet
 from rdkit import Chem
