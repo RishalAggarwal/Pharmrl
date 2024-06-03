@@ -75,7 +75,9 @@ def parse_arguments():
 
 
 def select_action(state,state_loader,policy_net,epsilon_start,epsilon_end,epsilon_decay,steps_done,test=False,stochastic=False,remove_state=False,time_step=0,min_features=3):
-    
+    if min_features<3:
+        min_features=3
+
     if test:
         eps_threshold=0
     else:
