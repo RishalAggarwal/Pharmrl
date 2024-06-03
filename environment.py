@@ -18,7 +18,6 @@ import random
 import json
 import subprocess
 import sys
-import math
 
 class MyCoordinateSet:
     

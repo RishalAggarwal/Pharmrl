@@ -258,7 +258,7 @@ def main(args):
             ligand_file_suffix=ligand_file_name.split('.')[-1]
             ligand_pybel=next(pybel.readfile(ligand_file_suffix, ligand_file_name))
             ligand=coord_reader.make_coords(ligand_file_name)
-        elif 'ligand' in input_json.keys():
+        elif input_json is not None and 'ligand' in input_json.keys():
             ligand_string=input_json['ligand']
             ligand_file_name=input_json['ligandFormat']
             ligand_file_suffix=ligand_file_name.split('.')[-1]
