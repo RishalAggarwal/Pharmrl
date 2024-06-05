@@ -121,7 +121,7 @@ def cnn_inference_arguments(args):
 def extract_json(json_file):
     """Takes a json files as input and returns a pandas dataframe with the headers as the keys of the json file"""
     with open(json_file) as f:
-        content=f.readlines()[0]
+        content=f.read()
         data = json.loads(r'{}'.format(content))
     return data
 
