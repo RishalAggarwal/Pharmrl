@@ -122,7 +122,7 @@ def extract_json(json_file):
     """Takes a json files as input and returns a pandas dataframe with the headers as the keys of the json file"""
     with open(json_file) as f:
         content=f.readlines()[0]
-        data = json.loads(r'{}'.format(content[0]))
+        data = json.loads(r'{}'.format(content))
     return data
 
 def dict_to_df(dict,vector=False):
