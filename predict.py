@@ -408,6 +408,9 @@ def main(args):
             next_state_dataloader,done=pharm_env.step(next_state,steps_done)
             state=next_state
             state_loader=next_state_dataloader
+        #dump individual pharmacophore files
+        json_dict_individual=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
+        json.dump(json_dict_individual,open(args.output_prefix+'_'+model.split('/')[1].split('.')[0]+'_predicted_pharmacophores.json','w'))
         try: #if json_dict already exists
             json_dict_new=pharm_env.state_to_json(state,min_features=args.min_features,label=model.split('/')[1].split('.')[0])
             json_dict["points"].extend(json_dict_new["points"])
