@@ -328,8 +328,9 @@ class Inference_environment():
         pharm_index=pharm_index.tolist()
         pharmit_points={}
         pharmit_points["points"]=[]
-        pharmit_points["exselect"] = "receptor"
-        pharmit_points["extolerance"] = 1
+        if label is None or (not label=='model_ligand'): 
+            pharmit_points["exselect"] = "receptor"
+            pharmit_points["extolerance"] = 1
         pharmit_points["recname"] = 'receptor.pdb'
         pharmit_points["receptor"] = self.receptor_string
         pharmit_points["recname"]=self.receptor_file_name
