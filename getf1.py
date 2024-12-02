@@ -1,6 +1,6 @@
 '''Run pharmit on specified database with query'''
 
-import argparse, sys, re, subprocess
+import argparse, sys, re, subprocess, json
 
 parser = argparse.ArgumentParser(description='Run pharmit on specified database with query and report F1 score')
 parser.add_argument("query",help="Query file (json) to search with")
@@ -8,6 +8,9 @@ parser.add_argument("db",help="Pharmit database to search")
 parser.add_argument("--actives",default="actives_final.ism",help="Name of actives smiles file",required=False)
 parser.add_argument("--decoys",default="decoys_final.ism",help="Name of decoys smiles file",required=False)
 args = parser.parse_args()
+
+query_json = json.load(open(args.query))
+num_feats= len(query_json['points'])
 
 try:
     num_decoys = len(open(args.decoys).readlines()) # count lines
@@ -36,7 +39,12 @@ try:
         f1 = 2*(precision*recall)/(precision+recall)
     enrichment_factor = precision/(num_actives/num_total)
     hit_rate = hits/num_total
+    #guner henry
+    if hits == 0:
+        gh = 0
+    else:
+        gh=((tp*(3*num_actives+hits))/(4*num_actives*hits))*(1-(hits-tp)/(num_total-num_actives))
 
-    print(f'F1: {f1:5f} Recall: {recall:5f} Precision: {precision:5f} Hit rate: {hit_rate:5f} Enrichment Factor: {enrichment_factor:5f}')
+    print(f'F1: {f1:5f} Recall: {recall:5f} Precision: {precision:5f} Hit rate: {hit_rate:5f} Enrichment Factor: {enrichment_factor:5f} Num Feats: {num_feats} GH: {gh:5f}')
 except:
     print('error')

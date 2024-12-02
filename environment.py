@@ -328,9 +328,9 @@ class Inference_environment():
         pharm_index=pharm_index.tolist()
         pharmit_points={}
         pharmit_points["points"]=[]
-        if label is None or (not label=='model_ligand'): 
-            pharmit_points["exselect"] = "receptor"
-            pharmit_points["extolerance"] = 1
+        #if label is None or (not label=='model_ligand'): 
+        pharmit_points["exselect"] = "receptor"
+        pharmit_points["extolerance"] = 1
         pharmit_points["recname"] = 'receptor.pdb'
         pharmit_points["receptor"] = self.receptor_string
         pharmit_points["recname"]=self.receptor_file_name
@@ -344,8 +344,12 @@ class Inference_environment():
             svector=self.feature_points[node,-1]
             for feature in features.split(':'):
                 radius=1
-                if 'Hydrogen' in feature:
-                    radius=1
+                '''if 'Hydrogen' in feature:
+                    radius=0.5
+                if 'Aromatic' in feature:
+                    radius=1.1
+                if 'ion' in feature:
+                    radius=0.75'''
                 if vector is not None and (isinstance(vector, list) or isinstance(vector, dict)):
                     if label is not None:
                         point_dict={"enabled": True,"name": feature, "radius":radius,"x":coord[0],"y":coord[1],"z":coord[2],"vector":vector,"svector":svector,"label": label}
