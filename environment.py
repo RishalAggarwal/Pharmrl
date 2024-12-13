@@ -109,8 +109,8 @@ class pharm_env():
 
     def get_target_df(self,return_reward='dataframe'):
         if return_reward=='dataframe':
-            self.system_dir=self.system.split('anddude')[0].split('/')[-2]
-            self.target_df=pickle.load(open(self.top_dir+'/dude/all/'+self.system_dir+'/target_df.pkl','rb'))
+            self.system_dir=self.system.split('and')[0].split('/')[-2]
+            self.target_df=pickle.load(open(self.top_dir+'/'+self.system_dir+'/target_df.pkl','rb'))
         if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
             try:
                 self.system_dir=self.system.split('crystal_ligand.mol2')[0].split('/')[0]
@@ -174,6 +174,8 @@ class pharm_env():
         if return_reward=='dataframe':
             file_sets=[]
             pharm_coords=cache[0]['centers']
+            if type(self.target_df)==tuple:
+                self.target_df=self.target_df[0]
             target_df=self.target_df
             target_df['f1']=target_df['f1']/target_df['f1'].max()
             target_df=target_df[self.target_df['file'].str.startswith('pharmit_'+str(num)+'_')==1].sort_values(by='f1',ascending=False)
@@ -196,6 +198,10 @@ class pharm_env():
                 json_fname=self.state_to_pharmit_query(graph,'_pharmit',cache, ligand_only=(return_reward=='dude_ligand_pharmit'))
                 pharmit_db_suffix=pharmit_database
                 if return_reward=='dude_pharmit' or return_reward=='dude_ligand_pharmit':
+                    if return_reward=='dude_ligand_pharmit':
+                        pharmit_db_suffix='pharmit_ligand_db'
+                    else:
+                        pharmit_db_suffix='pharmit_db'
                     if 'dude' in self.top_dir:
                         pharmit_database=self.top_dir+'/'+self.system_dir+'/'+pharmit_db_suffix
                         actives_ism=self.top_dir+'/'+self.system_dir+'/actives_final.ism'
